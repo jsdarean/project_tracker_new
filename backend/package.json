@@ -8,7 +8,8 @@
     "dev": "node --watch server.js",
     "setup": "node setup.js",
     "init-db": "node -e \"require('./db').initDatabase().then(()=>process.exit(0)).catch(()=>process.exit(1))\"",
-    "test-extractor": "node test-extractor.js"
+    "test-extractor": "node test-extractor.js",
+    "test": "node --test \"test/*.test.js\""
   },
   "dependencies": {
     "cors": "^2.8.5",

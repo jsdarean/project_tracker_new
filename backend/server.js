@@ -1031,7 +1031,12 @@ async function start() {
   });
 }
 
-start().catch(err => {
-  console.error('启动失败:', err);
-  process.exit(1);
-});
+// 直接运行时启动服务；被测试 require 时仅导出 app
+if (require.main === module) {
+  start().catch(err => {
+    console.error('启动失败:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, start };
