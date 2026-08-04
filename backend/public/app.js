@@ -7,6 +7,11 @@ let currentRows = [];
 const selectedIds = new Set();
 let exportFields = [];
 
+// 当前排序（字段白名单与后端一致）
+let currentSort = '';
+let currentOrder = 'asc';
+const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'planned_start_date', 'planned_end_date']);
+
 // 列表默认展示的字段（顺序），_select / _action 为非数据库字段
 const displayColumns = [
   '_select',
@@ -15,6 +20,10 @@ const displayColumns = [
   'project_code',
   'project_name',
   'approval_date',
+  'planned_start_date',
+  'planned_end_date',
+  'project_status',
+  'health_status',
   'approval_amount',
   'project_set',
   'project_subset',
@@ -48,6 +57,8 @@ const searchInput = document.getElementById('searchInput');
 const statusFilter = document.getElementById('statusFilter');
 const buildLevelFilter = document.getElementById('buildLevelFilter');
 const isRndFilter = document.getElementById('isRndFilter');
+const projectStatusFilter = document.getElementById('projectStatusFilter');
+const healthFilter = document.getElementById('healthFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 const exportBtn = document.getElementById('exportBtn');
 const editBtn = document.getElementById('editBtn');
@@ -59,9 +70,7 @@ let selectAllCheckbox = null;
 async function init() {
   await loadColumns();
   await loadExportSettings();
-  renderHeader();
-  selectAllCheckbox = document.getElementById('selectAll');
-  bindSelectAll();
+  refreshHeader();
   await loadData();
 }
 
@@ -102,8 +111,38 @@ function renderHeader() {
   tableHeadRow.innerHTML = displayColumns.map(field => {
     if (field === '_select') return '<th><input type="checkbox" id="selectAll" title="全选本页"></th>';
     if (field === '_action') return '<th>操作</th>';
-    return `<th>${escapeHtml(columnComments[field] || field)}</th>`;
+    const label = escapeHtml(columnComments[field] || field);
+    if (SORTABLE_COLUMNS.has(field)) {
+      const arrow = currentSort === field ? (currentOrder === 'asc' ? ' ↑' : ' ↓') : '';
+      return `<th class="sortable" data-sort="${field}">${label}${arrow}</th>`;
+    }
+    return `<th>${label}</th>`;
   }).join('');
+}
+
+// 表头重绘后重新绑定全选与排序事件
+function refreshHeader() {
+  renderHeader();
+  selectAllCheckbox = document.getElementById('selectAll');
+  bindSelectAll();
+  bindSort();
+}
+
+function bindSort() {
+  tableHeadRow.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const field = th.getAttribute('data-sort');
+      if (currentSort === field) {
+        currentOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort = field;
+        currentOrder = 'asc';
+      }
+      currentPage = 1;
+      refreshHeader();
+      loadData();
+    });
+  });
 }
 
 function bindSelectAll() {
@@ -133,6 +172,14 @@ async function loadData() {
     if (status) params.append('status', status);
     if (buildLevel) params.append('build_level', buildLevel);
     if (isRnd) params.append('is_rnd', isRnd);
+    const projectStatus = projectStatusFilter.value;
+    const health = healthFilter.value;
+    if (projectStatus) params.append('project_status', projectStatus);
+    if (health) params.append('health_status', health);
+    if (currentSort) {
+      params.append('sort', currentSort);
+      params.append('order', currentOrder);
+    }
 
     const resp = await fetch(`${API_BASE}/api/projects?${params.toString()}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -194,9 +241,17 @@ function renderCell(field, row) {
     case 'project_code':
       return `<td><a href="#" class="open-folder" data-code="${escapeHtml(row.project_code || '')}" data-name="${escapeHtml(row.project_name || '')}">${escapeHtml(row.project_code || '')}</a></td>`;
     case 'project_name':
-      return `<td title="${escapeHtml(row.project_name || '')}">${escapeHtml(truncate(row.project_name, 40))}</td>`;
+      return `<td title="${escapeHtml(row.project_name || '')}"><a href="detail.html?id=${row.id}">${escapeHtml(truncate(row.project_name, 40))}</a></td>`;
     case 'approval_date':
       return `<td>${formatDate(row.approval_date)}</td>`;
+    case 'planned_start_date':
+      return `<td>${formatDate(row.planned_start_date)}</td>`;
+    case 'planned_end_date':
+      return `<td>${formatDate(row.planned_end_date)}</td>`;
+    case 'project_status':
+      return `<td>${row.project_status ? `<span class="badge badge-status-${statusClass(row.project_status)}">${escapeHtml(row.project_status)}</span>` : ''}</td>`;
+    case 'health_status':
+      return `<td>${row.health_status ? `<span class="badge badge-health-${healthClass(row.health_status)}">${escapeHtml(row.health_status)}</span>` : ''}</td>`;
     case 'approval_amount':
       return `<td class="amount">${formatNumber(row.approval_amount)}</td>`;
     case 'project_set':
@@ -360,6 +415,14 @@ function formatDate(dateStr) {
   return d.toISOString().slice(0, 10);
 }
 
+function statusClass(status) {
+  return { '未启动': 'idle', '进行中': 'active', '已暂停': 'paused', '已结项': 'done' }[status] || 'idle';
+}
+
+function healthClass(health) {
+  return { '正常': 'ok', '关注': 'warn', '风险': 'danger' }[health] || 'ok';
+}
+
 function formatNumber(num) {
   if (num === null || num === undefined || num === '') return '';
   return Number(num).toLocaleString('zh-CN');
@@ -432,6 +495,16 @@ buildLevelFilter.addEventListener('change', () => {
 });
 
 isRndFilter.addEventListener('change', () => {
+  currentPage = 1;
+  loadData();
+});
+
+projectStatusFilter.addEventListener('change', () => {
+  currentPage = 1;
+  loadData();
+});
+
+healthFilter.addEventListener('change', () => {
   currentPage = 1;
   loadData();
 });
