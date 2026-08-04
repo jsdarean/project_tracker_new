@@ -31,6 +31,27 @@ const defaultExportFields = projectColumns
 // 联系人可维护字段
 const contactFields = ['city', 'company', 'department', 'position', 'name', 'phone', 'email', 'remarks', 'related_project'];
 
+// 项目状态与健康度合法取值（VARCHAR + 应用层校验，不用数据库 ENUM）
+const PROJECT_STATUS_VALUES = ['未启动', '进行中', '已暂停', '已结项'];
+const HEALTH_STATUS_VALUES = ['正常', '关注', '风险'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 校验跟踪字段：未传/null/空字符串跳过；非法值返回错误消息，合法返回 null
+function validateTrackingFields(data) {
+  if (data.project_status && !PROJECT_STATUS_VALUES.includes(data.project_status)) {
+    return `project_status 取值必须是：${PROJECT_STATUS_VALUES.join(' / ')}`;
+  }
+  if (data.health_status && !HEALTH_STATUS_VALUES.includes(data.health_status)) {
+    return `health_status 取值必须是：${HEALTH_STATUS_VALUES.join(' / ')}`;
+  }
+  for (const f of ['planned_start_date', 'planned_end_date']) {
+    if (data[f] && !DATE_RE.test(data[f])) {
+      return `${f} 必须是 YYYY-MM-DD 格式`;
+    }
+  }
+  return null;
+}
+
 async function loadSettings() {
   const dbCfg = getDbConfig();
   const defaults = {
@@ -431,6 +452,8 @@ app.get('/api/projects/check', async (req, res) => {
 app.post('/api/projects', async (req, res) => {
   try {
     const data = req.body;
+    const invalid = validateTrackingFields(data);
+    if (invalid) return res.status(400).json({ error: '参数校验失败', message: invalid });
     const fields = [
       'source_url', 'extracted_text', 'doc_number', 'category', 'project_code', 'project_name',
       'approval_date', 'design_date', 'completion_date', 'project_set', 'project_subset',
@@ -442,7 +465,8 @@ app.post('/api/projects', async (req, res) => {
       'mid_year_budget', 'budget_increase', 'undecided_supplement', 'decided_budget',
       'decided_in_project', 'undecided_in_project', 'remarks', 'estimated_actual',
       'releasable_amount', 'design_amount', 'completion_amount', 'build_level', 'listed',
-      'region', 'is_rnd', 'decision_method', 'status'
+      'region', 'is_rnd', 'decision_method', 'status',
+      'project_status', 'health_status', 'planned_start_date', 'planned_end_date'
     ];
     const placeholders = fields.map(() => '?').join(',');
     const values = fields.map(f => {
@@ -537,6 +561,8 @@ app.get('/api/projects/:id', async (req, res) => {
 app.put('/api/projects/:id', async (req, res) => {
   try {
     const data = req.body;
+    const invalid = validateTrackingFields(data);
+    if (invalid) return res.status(400).json({ error: '参数校验失败', message: invalid });
     const fields = [
       'source_url', 'extracted_text', 'doc_number', 'category', 'project_code', 'project_name',
       'approval_date', 'design_date', 'completion_date', 'project_set', 'project_subset',
@@ -548,7 +574,8 @@ app.put('/api/projects/:id', async (req, res) => {
       'mid_year_budget', 'budget_increase', 'undecided_supplement', 'decided_budget',
       'decided_in_project', 'undecided_in_project', 'remarks', 'estimated_actual',
       'releasable_amount', 'design_amount', 'completion_amount', 'build_level', 'listed',
-      'region', 'is_rnd', 'decision_method', 'status'
+      'region', 'is_rnd', 'decision_method', 'status',
+      'project_status', 'health_status', 'planned_start_date', 'planned_end_date'
     ];
     const updates = [];
     const values = [];
