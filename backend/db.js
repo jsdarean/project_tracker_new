@@ -89,6 +89,10 @@ const projectColumns = [
   '`region` VARCHAR(200) DEFAULT NULL COMMENT \'地区\'',
   '`is_rnd` VARCHAR(20) DEFAULT NULL COMMENT \'是否研发项目\'',
   '`decision_method` VARCHAR(300) DEFAULT NULL COMMENT \'决策方式\'',
+  '`project_status` VARCHAR(20) DEFAULT \'未启动\' COMMENT \'项目状态（未启动/进行中/已暂停/已结项）\'',
+  '`health_status` VARCHAR(20) DEFAULT \'正常\' COMMENT \'健康度（正常/关注/风险）\'',
+  '`planned_start_date` DATE DEFAULT NULL COMMENT \'计划开始日期\'',
+  '`planned_end_date` DATE DEFAULT NULL COMMENT \'计划结束日期\'',
   '`status` ENUM(\'draft\',\'saved\') DEFAULT \'draft\' COMMENT \'保存状态\'',
   '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
   '`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT \'更新时间\'',
@@ -149,7 +153,8 @@ async function initDatabase() {
       PRIMARY KEY (\`id\`),
       KEY \`idx_project_code\` (\`project_code\`),
       KEY \`idx_doc_number\` (\`doc_number\`),
-      KEY \`idx_status\` (\`status\`)
+      KEY \`idx_status\` (\`status\`),
+      KEY \`idx_project_status\` (\`project_status\`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `;
   await query(createTableSql);
@@ -169,6 +174,16 @@ async function initDatabase() {
       await db.query(`ALTER TABLE \`projects\` ADD COLUMN ${colDef}`);
       console.log('新增字段:', colName);
     }
+  }
+
+  // 为已存在的表补充缺失索引（CREATE TABLE IF NOT EXISTS 不会补索引）
+  const [existingIdx] = await db.execute(
+    `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [dbName, 'projects', 'idx_project_status']
+  );
+  if (existingIdx.length === 0) {
+    await db.query('ALTER TABLE `projects` ADD KEY `idx_project_status` (`project_status`)');
+    console.log('新增索引: idx_project_status');
   }
 
   // 为已存在的表补充/更新字段注释，避免删表丢数据
