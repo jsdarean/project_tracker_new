@@ -18,6 +18,11 @@ const readonlyFields = new Set(['id', 'created_at', 'updated_at']);
 const textareaFields = new Set(['source_url', 'extracted_text', 'remarks', 'change_status',
   'mid_year_budget', 'budget_increase', 'undecided_supplement', 'decided_budget',
   'decided_in_project', 'undecided_in_project']);
+// VARCHAR 但语义为枚举的字段，渲染为下拉（与后端校验取值保持一致）
+const selectFields = {
+  project_status: ['未启动', '进行中', '已暂停', '已结项'],
+  health_status: ['正常', '关注', '风险'],
+};
 
 async function init() {
   if (!projectId) {
@@ -119,6 +124,22 @@ function renderField(col) {
     input.className = 'readonly-field';
     input.readOnly = true;
     group.appendChild(input);
+  } else if (selectFields[field]) {
+    const select = document.createElement('select');
+    select.id = `field-${field}`;
+    select.name = field;
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '请选择';
+    select.appendChild(emptyOption);
+    for (const v of selectFields[field]) {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      if (value === v) opt.selected = true;
+      select.appendChild(opt);
+    }
+    group.appendChild(select);
   } else if (type.toLowerCase().includes('enum')) {
     const values = parseEnumValues(type);
     const select = document.createElement('select');
