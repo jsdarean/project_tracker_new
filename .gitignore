@@ -19,3 +19,6 @@ docs/*.docx
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 隔离工作区
+.worktrees/
