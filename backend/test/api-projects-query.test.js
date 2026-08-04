@@ -62,6 +62,23 @@ test('未识别的 sort 回退为 id DESC，不报错', async () => {
   assert.strictEqual(body.total, 3);
 });
 
+test('旧筛选：keyword 关键词过滤仍工作', async () => {
+  const resp = await fetch(`${baseUrl}/api/projects?keyword=${encodeURIComponent('项目A')}`);
+  const body = await resp.json();
+  assert.strictEqual(body.total, 1);
+  assert.strictEqual(body.data[0].project_name, '项目A');
+});
+
+test('旧筛选：status 保存状态过滤仍工作', async () => {
+  const resp = await fetch(`${baseUrl}/api/projects?status=draft`);
+  const body = await resp.json();
+  assert.strictEqual(body.total, 3);
+
+  const respSaved = await fetch(`${baseUrl}/api/projects?status=saved`);
+  const bodySaved = await respSaved.json();
+  assert.strictEqual(bodySaved.total, 0);
+});
+
 // 保持在本文件最后：该用例额外插入一行，避免影响前面对 total 的断言
 test('GET /api/projects/:id 返回 4 个新字段；不存在返回 404', async () => {
   await db.query(`INSERT INTO projects (project_name, project_status, health_status) VALUES ('详情项目', '已暂停', '关注')`);

@@ -87,3 +87,33 @@ test('POST /api/projects 不带新字段时行为不变（兼容插件）', asyn
   const body = await resp.json();
   assert.strictEqual(body.success, true);
 });
+
+test('POST /api/projects 携带合法新字段可落库', async () => {
+  const resp = await fetch(`${baseUrl}/api/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_name: '新字段项目',
+      project_status: '进行中',
+      health_status: '风险',
+      planned_start_date: '2026-08-01',
+      planned_end_date: '2026-12-31',
+    }),
+  });
+  assert.strictEqual(resp.status, 200);
+  const body = await resp.json();
+  const rows = await db.query('SELECT * FROM projects WHERE id = ?', [body.id]);
+  assert.strictEqual(rows[0].project_status, '进行中');
+  assert.strictEqual(rows[0].health_status, '风险');
+  assert.strictEqual(rows[0].planned_start_date, '2026-08-01');
+  assert.strictEqual(rows[0].planned_end_date, '2026-12-31');
+});
+
+test('POST /api/projects 非法 project_status 返回 400', async () => {
+  const resp = await fetch(`${baseUrl}/api/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project_name: '非法项目', project_status: '随便写' }),
+  });
+  assert.strictEqual(resp.status, 400);
+});
