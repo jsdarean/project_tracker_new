@@ -909,6 +909,7 @@ td .btn-small + .btn-small {
 th.sortable {
   cursor: pointer;
   user-select: none;
+  white-space: nowrap;
 }
 
 th.sortable:hover {
@@ -1017,7 +1018,3 @@ th.sortable:hover {
 .badge-health-ok { background: rgba(46, 125, 50, 0.12); color: #2e7d32; }
 .badge-health-warn { background: rgba(245, 166, 35, 0.15); color: #b26a00; }
 .badge-health-danger { background: rgba(234, 34, 97, 0.12); color: var(--ruby); }
-
-/* 可排序表头 */
-th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
-th.sortable:hover { color: var(--primary); }
