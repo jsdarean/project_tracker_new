@@ -491,53 +491,57 @@ app.post('/api/projects', async (req, res) => {
 // 列表查询
 app.get('/api/projects', async (req, res) => {
   try {
-    const { status, keyword, build_level, is_rnd } = req.query;
+    const { status, keyword, build_level, is_rnd, project_status, health_status } = req.query;
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const size = Math.max(1, Math.min(100, parseInt(req.query.pageSize, 10) || 20));
     const offset = (page - 1) * size;
 
-    let sql = 'SELECT * FROM projects WHERE 1=1';
+    let where = ' WHERE 1=1';
     const params = [];
     if (status) {
-      sql += ' AND status = ?';
+      where += ' AND status = ?';
       params.push(status);
     }
     if (keyword) {
-      sql += ' AND (project_name LIKE ? OR project_code LIKE ? OR doc_number LIKE ?)';
+      where += ' AND (project_name LIKE ? OR project_code LIKE ? OR doc_number LIKE ?)';
       params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
     }
     if (build_level) {
-      sql += ' AND build_level = ?';
+      where += ' AND build_level = ?';
       params.push(build_level);
     }
     if (is_rnd) {
-      sql += ' AND is_rnd = ?';
+      where += ' AND is_rnd = ?';
       params.push(is_rnd);
     }
+    if (project_status) {
+      const values = project_status.split(',').map((s) => s.trim()).filter(Boolean);
+      if (values.length > 0) {
+        where += ` AND project_status IN (${values.map(() => '?').join(',')})`;
+        params.push(...values);
+      }
+    }
+    if (health_status) {
+      const values = health_status.split(',').map((s) => s.trim()).filter(Boolean);
+      if (values.length > 0) {
+        where += ` AND health_status IN (${values.map(() => '?').join(',')})`;
+        params.push(...values);
+      }
+    }
+
+    // 排序字段白名单，未识别回退 id DESC
+    const SORTABLE_COLUMNS = new Set([
+      'project_status', 'health_status', 'planned_start_date', 'planned_end_date',
+    ]);
+    let orderBy = ' ORDER BY id DESC';
+    if (SORTABLE_COLUMNS.has(req.query.sort)) {
+      const dir = String(req.query.order).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+      orderBy = ` ORDER BY \`${req.query.sort}\` ${dir}, id DESC`;
+    }
+
     // LIMIT/OFFSET 直接拼入 SQL，避免部分 MySQL 版本对占位符的支持问题
-    sql += ` ORDER BY id DESC LIMIT ${size} OFFSET ${offset}`;
-
-    const rows = await query(sql, params);
-
-    let countSql = 'SELECT COUNT(*) AS total FROM projects WHERE 1=1';
-    const countParams = [];
-    if (status) {
-      countSql += ' AND status = ?';
-      countParams.push(status);
-    }
-    if (keyword) {
-      countSql += ' AND (project_name LIKE ? OR project_code LIKE ? OR doc_number LIKE ?)';
-      countParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
-    }
-    if (build_level) {
-      countSql += ' AND build_level = ?';
-      countParams.push(build_level);
-    }
-    if (is_rnd) {
-      countSql += ' AND is_rnd = ?';
-      countParams.push(is_rnd);
-    }
-    const [countRow] = await query(countSql, countParams);
+    const rows = await query(`SELECT * FROM projects${where}${orderBy} LIMIT ${size} OFFSET ${offset}`, params);
+    const [countRow] = await query(`SELECT COUNT(*) AS total FROM projects${where}`, params);
 
     res.json({ success: true, data: rows, total: countRow.total });
   } catch (err) {
