@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>问题详情</title>
+  <link rel="stylesheet" href="style.css?v=27">
+  <style>
+    .issue-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: var(--space-md) var(--space-xl);
+      padding: var(--space-lg);
+    }
+    .form-group { display: flex; flex-direction: column; gap: var(--space-xs); }
+    .form-group.full-width { grid-column: 1 / -1; }
+    .form-group label { font-size: 13px; color: var(--ink-secondary); }
+    .form-group input, .form-group select, .form-group textarea {
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--ink);
+      background: var(--canvas);
+      border: 1px solid var(--hairline-input);
+      border-radius: var(--rounded-sm);
+      padding: var(--space-sm) var(--space-md);
+      outline: none;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+    .form-group textarea { min-height: 90px; resize: vertical; line-height: 1.6; }
+    .form-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-lg);
+      border-top: 1px solid var(--hairline);
+    }
+    .solution-view { padding: 0 var(--space-lg) var(--space-lg); font-size: 14px; }
+    .solution-view .label { font-size: 12px; color: var(--ink-mute); }
+    .solution-view .value { white-space: pre-wrap; word-break: break-all; }
+    /* 解决/关闭弹层 */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .modal-card {
+      background: var(--canvas);
+      border-radius: var(--rounded-sm);
+      padding: var(--space-lg);
+      width: 480px;
+      max-width: 92vw;
+    }
+    .modal-card h3 { margin: 0 0 var(--space-md); font-size: 16px; color: var(--ink); }
+    .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-md); }
+    .comments-list { padding: 0 var(--space-lg); }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-mesh" aria-hidden="true"></div>
+    <div class="container hero-content">
+      <header class="page-header">
+        <div class="page-title">
+          <h1 id="pageTitle">问题详情</h1>
+          <p id="pageSubtitle"></p>
+        </div>
+        <a href="issues.html" class="btn-secondary settings-btn">返回列表</a>
+      </header>
+    </div>
+  </div>
+
+  <main class="container">
+    <div id="loading" class="loading card">加载中...</div>
+    <div id="error" class="error card" style="display: none;"></div>
+
+    <div id="issueCard" class="card" style="display: none;">
+      <form id="issueForm">
+        <div class="issue-form">
+          <div class="form-group full-width">
+            <label for="fTitle">问题标题 *</label>
+            <input type="text" id="fTitle" required>
+          </div>
+          <div class="form-group">
+            <label for="fProject">所属项目 *</label>
+            <select id="fProject" required></select>
+          </div>
+          <div class="form-group">
+            <label for="fSeverity">严重程度</label>
+            <select id="fSeverity">
+              <option value="一般">一般</option>
+              <option value="重要">重要</option>
+              <option value="紧急">紧急</option>
+            </select>
+          </div>
+          <div class="form-group" id="statusGroup">
+            <label for="fStatus">状态</label>
+            <select id="fStatus">
+              <option value="新建">新建</option>
+              <option value="处理中">处理中</option>
+              <option value="待确认">待确认</option>
+              <option value="已解决">已解决</option>
+              <option value="已关闭">已关闭</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="fAssignee">责任人</label>
+            <input type="text" id="fAssignee" list="contactNames">
+          </div>
+          <div class="form-group">
+            <label for="fHelper">协助人</label>
+            <input type="text" id="fHelper" list="contactNames">
+          </div>
+          <div class="form-group">
+            <label for="fFoundDate">发现日期</label>
+            <input type="date" id="fFoundDate">
+          </div>
+          <div class="form-group">
+            <label for="fDueDate">期望解决日期</label>
+            <input type="date" id="fDueDate">
+          </div>
+          <div class="form-group full-width">
+            <label for="fDescription">问题描述</label>
+            <textarea id="fDescription"></textarea>
+          </div>
+        </div>
+        <datalist id="contactNames"></datalist>
+        <div id="solutionHistory" class="solution-view" style="display: none;">
+          <div class="form-group full-width">
+            <span class="label">解决方案（历史）</span>
+            <div class="value" id="solutionText"></div>
+            <span class="label" id="resolvedAtText"></span>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary" id="saveBtn">保存</button>
+          <button type="button" id="reopenBtn" class="btn-secondary" style="display: none;">重新打开</button>
+          <button type="button" id="deleteBtn" class="btn-danger" style="display: none;">删除</button>
+          <a href="issues.html" class="btn-secondary">取消</a>
+        </div>
+      </form>
+    </div>
+
+    <div id="commentsSection" class="card" style="display: none;">
+      <!-- Task 6 填充评论区 -->
+    </div>
+
+    <div id="resolveModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <h3 id="resolveTitle">填写解决方案</h3>
+        <div id="resolveError" class="error" style="display: none;"></div>
+        <div class="form-group">
+          <label for="mSolution">解决方案 *</label>
+          <textarea id="mSolution"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="mResolvedAt">实际解决日期 *</label>
+          <input type="date" id="mResolvedAt">
+        </div>
+        <div class="modal-actions">
+          <button id="resolveConfirmBtn" class="btn-primary">确认</button>
+          <button id="resolveCancelBtn" class="btn-secondary">取消</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="issue_detail.js"></script>
+</body>
+</html>
