@@ -54,6 +54,28 @@
     .modal-card h3 { margin: 0 0 var(--space-md); font-size: 16px; color: var(--ink); }
     .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-md); }
     .comments-list { padding: 0 var(--space-lg); }
+    /* 评论区 */
+    .comments-inner { padding: var(--space-lg); }
+    .comments-title { margin: 0 0 var(--space-md); font-size: 15px; color: var(--ink); }
+    .comment-item { padding: var(--space-sm) 0; border-bottom: 1px solid var(--hairline); }
+    .comment-item:last-child { border-bottom: none; }
+    .comment-meta { font-size: 12px; color: var(--ink-mute); margin-bottom: 2px; }
+    .comment-text { font-size: 14px; color: var(--ink); white-space: pre-wrap; word-break: break-all; }
+    .comment-form { display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-md); }
+    .comment-form input, .comment-form textarea {
+      font-family: inherit;
+      font-size: 14px;
+      padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--hairline-input);
+      border-radius: var(--rounded-sm);
+      background: var(--canvas);
+      color: var(--ink);
+      outline: none;
+      resize: vertical;
+    }
+    .comment-form input { width: 200px; }
+    .comment-form button { align-self: flex-end; }
+    .comments-empty { color: var(--ink-mute); font-size: 13px; }
   </style>
 </head>
 <body>
@@ -142,7 +164,16 @@
     </div>
 
     <div id="commentsSection" class="card" style="display: none;">
-      <!-- Task 6 填充评论区 -->
+      <div class="comments-inner">
+        <h3 class="comments-title">评论</h3>
+        <div id="commentsError" class="error" style="display: none;"></div>
+        <div id="commentsList" class="comments-list"></div>
+        <div class="comment-form">
+          <input type="text" id="commentAuthor" placeholder="你的姓名">
+          <textarea id="commentContent" placeholder="写下你的评论…" rows="3"></textarea>
+          <button id="commentSubmitBtn" class="btn-primary">发表评论</button>
+        </div>
+      </div>
     </div>
 
     <div id="resolveModal" class="modal-overlay" style="display: none;">

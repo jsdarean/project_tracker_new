@@ -34,6 +34,12 @@ const mSolution = document.getElementById('mSolution');
 const mResolvedAt = document.getElementById('mResolvedAt');
 const resolveConfirmBtn = document.getElementById('resolveConfirmBtn');
 const resolveCancelBtn = document.getElementById('resolveCancelBtn');
+const commentsSection = document.getElementById('commentsSection');
+const commentsList = document.getElementById('commentsList');
+const commentsError = document.getElementById('commentsError');
+const commentAuthor = document.getElementById('commentAuthor');
+const commentContent = document.getElementById('commentContent');
+const commentSubmitBtn = document.getElementById('commentSubmitBtn');
 
 const CLOSED_STATUSES = ['已解决', '已关闭'];
 let currentIssue = null;
@@ -93,6 +99,10 @@ function initEditMode() {
     solutionText.textContent = currentIssue.solution;
     resolvedAtText.textContent = currentIssue.resolved_at ? `实际解决日期：${formatDate(currentIssue.resolved_at)}` : '';
   }
+  commentsSection.style.display = 'block';
+  commentAuthor.value = localStorage.getItem('progress_reporter') || '';
+  commentSubmitBtn.onclick = submitComment;
+  loadComments();
 }
 
 async function loadProjects() {
@@ -234,6 +244,63 @@ deleteBtn.addEventListener('click', async () => {
     alert('删除失败：' + err.message);
   }
 });
+
+async function loadComments() {
+  commentsError.style.display = 'none';
+  try {
+    const resp = await fetch(`${API_BASE}/api/issues/${issueId}/comments`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.error || '加载评论失败');
+    renderComments(result.data || []);
+  } catch (err) {
+    commentsList.innerHTML = '';
+    commentsError.textContent = '评论加载失败：' + err.message;
+    commentsError.style.display = 'block';
+  }
+}
+
+function renderComments(items) {
+  if (items.length === 0) {
+    commentsList.innerHTML = '<div class="comments-empty">暂无评论</div>';
+    return;
+  }
+  commentsList.innerHTML = items.map(c => `
+    <div class="comment-item">
+      <div class="comment-meta">${escapeHtml(c.author || '匿名')} · ${formatDateTime(c.created_at)}</div>
+      <div class="comment-text">${escapeHtml(c.content)}</div>
+    </div>`).join('');
+}
+
+async function submitComment() {
+  const content = commentContent.value.trim();
+  if (!content) { alert('请填写评论内容'); return; }
+  commentSubmitBtn.disabled = true;
+  try {
+    const resp = await fetch(`${API_BASE}/api/issues/${issueId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, author: commentAuthor.value.trim() }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.message || result.error || `HTTP ${resp.status}`);
+    if (commentAuthor.value.trim()) localStorage.setItem('progress_reporter', commentAuthor.value.trim());
+    commentContent.value = '';
+    await loadComments();
+  } catch (err) {
+    alert('发表评论失败：' + err.message);
+  } finally {
+    commentSubmitBtn.disabled = false;
+  }
+}
+
+function formatDateTime(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 function hideLoading() { loadingEl.style.display = 'none'; }
 function showError(msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
