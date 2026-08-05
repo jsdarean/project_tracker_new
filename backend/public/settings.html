@@ -74,6 +74,44 @@
 
     <section class="card settings-card">
       <div class="settings-card-header">
+        <h2>邮件催办</h2>
+        <p>配置 SMTP 发件、IMAP 退信回收与催办策略。密码保存后不回显，留空表示不修改。</p>
+      </div>
+      <div class="settings-form">
+        <div class="settings-row"><label for="smtpHost">SMTP 主机</label><input type="text" id="smtpHost" placeholder="smtp.example.com"></div>
+        <div class="settings-row"><label for="smtpPort">SMTP 端口</label><input type="number" id="smtpPort" placeholder="465"></div>
+        <div class="settings-row"><label for="smtpSecure">SMTP SSL</label><select id="smtpSecure"><option value="true">启用（465）</option><option value="false">关闭（25/587）</option></select></div>
+        <div class="settings-row"><label for="smtpUser">SMTP 账号</label><input type="text" id="smtpUser" placeholder="noreply@example.com"></div>
+        <div class="settings-row"><label for="smtpPass">SMTP 密码/授权码</label><input type="password" id="smtpPass" placeholder="留空表示不修改"></div>
+        <div class="settings-row"><label for="mailFrom">发件人显示</label><input type="text" id="mailFrom" placeholder="项目跟踪 <noreply@example.com>"></div>
+
+        <div class="settings-row"><label for="imapHost">IMAP 主机</label><input type="text" id="imapHost" placeholder="imap.example.com"></div>
+        <div class="settings-row"><label for="imapPort">IMAP 端口</label><input type="number" id="imapPort" placeholder="993"></div>
+        <div class="settings-row"><label for="imapSecure">IMAP SSL</label><select id="imapSecure"><option value="true">启用（993）</option><option value="false">关闭（143）</option></select></div>
+        <div class="settings-row"><label for="imapUser">IMAP 账号</label><input type="text" id="imapUser" placeholder="noreply@example.com"></div>
+        <div class="settings-row"><label for="imapPass">IMAP 密码/授权码</label><input type="password" id="imapPass" placeholder="留空表示不修改"></div>
+        <div class="settings-row"><label for="imapMailbox">IMAP 邮箱</label><input type="text" id="imapMailbox" placeholder="INBOX"></div>
+        <div class="settings-row"><label for="bounceScanEnabled">退信回收</label><select id="bounceScanEnabled"><option value="false">关闭</option><option value="true">开启</option></select></div>
+        <div class="settings-row"><label for="cronBounce">退信扫描 cron</label><input type="text" id="cronBounce" placeholder="*/30 * * * *"></div>
+
+        <div class="settings-row"><label for="leaderEmails">领导邮箱</label><input type="text" id="leaderEmails" placeholder="逗号分隔多个"></div>
+        <div class="settings-row"><label for="publicBaseUrl">系统访问地址</label><input type="text" id="publicBaseUrl" placeholder="http://localhost:3000"></div>
+        <div class="settings-row"><label for="escalationEnabled">催办总开关</label><select id="escalationEnabled"><option value="false">关闭</option><option value="true">开启</option></select></div>
+        <div class="settings-row"><label for="sendOnWeekend">周末发送</label><select id="sendOnWeekend"><option value="false">不发送</option><option value="true">发送</option></select></div>
+        <div class="settings-row"><label for="cronDaily">每日催办 cron</label><input type="text" id="cronDaily" placeholder="0 9 * * *"></div>
+        <div class="settings-row"><label for="cronWeekly">每周提醒 cron</label><input type="text" id="cronWeekly" placeholder="0 9 * * 1"></div>
+
+        <div class="settings-row settings-row-action">
+          <label></label>
+          <input type="text" id="testMailTo" placeholder="测试收件地址" style="max-width: 220px;">
+          <button type="button" id="testMailBtn" class="btn-secondary">发送测试邮件</button>
+          <span id="testMailStatus" class="settings-status"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card settings-card">
+      <div class="settings-card-header">
         <h2>导出字段</h2>
         <p>勾选需要在“项目信息查询”页面导出 Excel 时包含的字段。</p>
       </div>
@@ -109,6 +147,6 @@
     </section>
   </main>
 
-  <script src="settings.js?v=2"></script>
+  <script src="settings.js?v=3"></script>
 </body>
 </html>

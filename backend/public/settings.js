@@ -13,6 +13,28 @@ const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const settingsStatusEl = document.getElementById('settingsStatus');
 const exportFieldsEl = document.getElementById('exportFields');
 
+const EMAIL_FIELD_IDS = ['smtpHost', 'smtpPort', 'smtpSecure', 'smtpUser', 'mailFrom',
+  'imapHost', 'imapPort', 'imapSecure', 'imapUser', 'imapMailbox', 'bounceScanEnabled', 'cronBounce',
+  'leaderEmails', 'publicBaseUrl', 'escalationEnabled', 'sendOnWeekend', 'cronDaily', 'cronWeekly'];
+const emailEls = {};
+for (const id of EMAIL_FIELD_IDS) emailEls[id] = document.getElementById(id);
+const smtpPassInput = document.getElementById('smtpPass');
+const imapPassInput = document.getElementById('imapPass');
+const testMailTo = document.getElementById('testMailTo');
+const testMailBtn = document.getElementById('testMailBtn');
+const testMailStatus = document.getElementById('testMailStatus');
+
+// 表单元素 id（驼峰）与 settings 键（蛇形）映射
+const EMAIL_KEY_MAP = {
+  smtpHost: 'smtp_host', smtpPort: 'smtp_port', smtpSecure: 'smtp_secure', smtpUser: 'smtp_user',
+  mailFrom: 'mail_from',
+  imapHost: 'imap_host', imapPort: 'imap_port', imapSecure: 'imap_secure', imapUser: 'imap_user',
+  imapMailbox: 'imap_mailbox', bounceScanEnabled: 'bounce_scan_enabled', cronBounce: 'cron_bounce',
+  leaderEmails: 'leader_emails', publicBaseUrl: 'public_base_url',
+  escalationEnabled: 'escalation_enabled', sendOnWeekend: 'send_on_weekend',
+  cronDaily: 'cron_daily', cronWeekly: 'cron_weekly',
+};
+
 let columnMeta = [];
 let currentExportFields = [];
 let watchTags = [];
@@ -139,6 +161,14 @@ async function loadSettingsUI() {
       dbNameInput.value = result.data.db_name || '';
       currentExportFields = Array.isArray(result.data.export_fields) ? result.data.export_fields : [];
       watchTags = Array.isArray(result.data.watch_tags) ? result.data.watch_tags : [];
+      for (const [id, key] of Object.entries(EMAIL_KEY_MAP)) {
+        const v = result.data[key];
+        if (v === undefined || v === null) continue;
+        if (emailEls[id].tagName === 'SELECT') emailEls[id].value = String(v === true || v === 'true' || v === 1 ? 'true' : 'false');
+        else emailEls[id].value = v;
+      }
+      smtpPassInput.value = '';
+      imapPassInput.value = '';
     }
     renderExportFields();
     renderWatchTags();
@@ -192,6 +222,15 @@ async function saveAllSettings() {
     watch_tags: watchTags,
   };
 
+  for (const [id, key] of Object.entries(EMAIL_KEY_MAP)) {
+    const el = emailEls[id];
+    if (el.tagName === 'SELECT') payload[key] = el.value === 'true';
+    else if (el.type === 'number') payload[key] = parseInt(el.value, 10) || 0;
+    else payload[key] = el.value.trim();
+  }
+  if (smtpPassInput.value) payload.smtp_pass = smtpPassInput.value;
+  if (imapPassInput.value) payload.imap_pass = imapPassInput.value;
+
   if (!payload.archive_folder) {
     showSettingsStatus('请填写归档文件夹路径', 'error');
     return;
@@ -224,5 +263,26 @@ function showSettingsStatus(message, type) {
 
 saveSettingsBtn.addEventListener('click', saveAllSettings);
 testDbBtn.addEventListener('click', testDbConnection);
+
+testMailBtn.addEventListener('click', async () => {
+  const to = testMailTo.value.trim();
+  if (!to) { testMailStatus.textContent = '请先填写测试收件地址'; testMailStatus.className = 'settings-status error'; return; }
+  testMailStatus.textContent = '发送中...';
+  testMailStatus.className = 'settings-status';
+  try {
+    const resp = await fetch(`${API_BASE}/api/escalation/test-mail`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.message || result.error || `HTTP ${resp.status}`);
+    testMailStatus.textContent = '✅ 已发送，请查收';
+    testMailStatus.className = 'settings-status ok';
+  } catch (err) {
+    testMailStatus.textContent = '❌ ' + err.message;
+    testMailStatus.className = 'settings-status error';
+  }
+});
 
 loadSettingsUI();
