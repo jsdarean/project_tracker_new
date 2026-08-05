@@ -722,10 +722,13 @@ app.put('/api/progress/:id', async (req, res) => {
       }
     }
     if (updates.length === 0) return res.status(400).json({ error: '没有可更新字段' });
+
+    // mysql2 默认 UPDATE 值未变时 affectedRows=0，不能据此判断 404，先查存在性
+    const exists = await query('SELECT id FROM project_progress WHERE id = ?', [req.params.id]);
+    if (exists.length === 0) return res.status(404).json({ error: '进展记录不存在' });
     values.push(req.params.id);
 
-    const result = await query(`UPDATE project_progress SET ${updates.join(',')} WHERE id = ?`, values);
-    if (result.affectedRows === 0) return res.status(404).json({ error: '进展记录不存在' });
+    await query(`UPDATE project_progress SET ${updates.join(',')} WHERE id = ?`, values);
     res.json({ success: true });
   } catch (err) {
     console.error('更新进展失败:', err);

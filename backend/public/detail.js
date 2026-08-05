@@ -222,6 +222,9 @@ function closeProgressModal() {
 
 async function submitProgressForm(e) {
   e.preventDefault();
+  // POST 非幂等，在途禁用提交按钮防止连点重复插入
+  const submitBtn = progressForm.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
   progressModalError.style.display = 'none';
   const payload = {
     report_date: pfReportDate.value,
@@ -249,6 +252,8 @@ async function submitProgressForm(e) {
   } catch (err) {
     progressModalError.textContent = '保存失败：' + err.message;
     progressModalError.style.display = 'block';
+  } finally {
+    submitBtn.disabled = false;
   }
 }
 

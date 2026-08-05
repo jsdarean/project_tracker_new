@@ -123,6 +123,19 @@ test('PUT 修改字段生效', async () => {
   assert.strictEqual(rows[0].report_date, '2026-08-02', '未传字段不应被改动');
 });
 
+test('PUT 相同值（无实际变更）→ 200，不误报 404', async () => {
+  const ins = await db.query(
+    `INSERT INTO project_progress (project_id, report_date, completed_content) VALUES (?, '2026-08-05', '原样')`,
+    [projectId]
+  );
+  const resp = await fetch(`${baseUrl}/api/progress/${ins.insertId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ completed_content: '原样' }),
+  });
+  assert.strictEqual(resp.status, 200);
+});
+
 test('PUT 非法值 → 400；不存在的 id → 404', async () => {
   const ins = await db.query(
     `INSERT INTO project_progress (project_id, report_date, completed_content) VALUES (?, '2026-08-02', '原文')`,
