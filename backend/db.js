@@ -132,6 +132,21 @@ const watchProgressColumns = [
   '`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT \'更新时间\'',
 ];
 
+// 项目进展表字段定义（project_id 关联 projects.id；attachments 为后续阶段附件占位）
+const progressColumns = [
+  '`id` INT NOT NULL AUTO_INCREMENT COMMENT \'序号\'',
+  '`project_id` INT NOT NULL COMMENT \'项目 ID\'',
+  '`report_date` DATE NOT NULL COMMENT \'填报日期\'',
+  '`completed_content` TEXT COMMENT \'完成内容\'',
+  '`next_plan` TEXT COMMENT \'下阶段计划\'',
+  '`risk_note` TEXT COMMENT \'风险说明\'',
+  '`tags` VARCHAR(200) DEFAULT NULL COMMENT \'标签（逗号分隔：里程碑达成/风险上升/需领导决策）\'',
+  '`attachments` TEXT COMMENT \'附件（JSON，预留）\'',
+  '`reporter` VARCHAR(100) DEFAULT NULL COMMENT \'填报人\'',
+  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
+  '`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT \'更新时间\'',
+];
+
 function parseColumnName(colDef) {
   const m = colDef.match(/^`([^`]+)`/);
   return m ? m[1] : '';
@@ -258,6 +273,36 @@ async function initDatabase() {
   `;
   await query(createProgressSql);
 
+  // 创建项目进展表
+  const createProjectProgressSql = `
+    CREATE TABLE IF NOT EXISTS \`project_progress\` (
+      ${progressColumns.join(',\n      ')},
+      PRIMARY KEY (\`id\`),
+      KEY \`idx_progress_project_id\` (\`project_id\`),
+      KEY \`idx_progress_report_date\` (\`report_date\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createProjectProgressSql);
+
+  // 为已存在的进展表补充缺失字段
+  const [existingProgressCols] = await db.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [dbName, 'project_progress']
+  );
+  const existingProgressSet = new Set(existingProgressCols.map(c => c.COLUMN_NAME));
+  for (const colDef of progressColumns) {
+    const colName = parseColumnName(colDef);
+    if (!existingProgressSet.has(colName)) {
+      await db.query(`ALTER TABLE \`project_progress\` ADD COLUMN ${colDef}`);
+      console.log('新增进展表字段:', colName);
+    }
+  }
+
+  // 为已存在的进展表补充/更新字段注释
+  for (const colDef of progressColumns) {
+    await db.query(`ALTER TABLE \`project_progress\` MODIFY COLUMN ${colDef}`);
+  }
+
   console.log('数据库与表初始化完成:', dbName);
 }
 
@@ -269,6 +314,7 @@ module.exports = {
   contactColumns,
   watchProjectColumns,
   watchProgressColumns,
+  progressColumns,
   setDbConfig,
   getDbConfig,
 };
