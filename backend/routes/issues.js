@@ -266,4 +266,42 @@ router.delete('/api/issues/:id', async (req, res) => {
   }
 });
 
+// 评论列表（正序）
+router.get('/api/issues/:id/comments', async (req, res) => {
+  try {
+    const issueRows = await query('SELECT id FROM issues WHERE id = ?', [req.params.id]);
+    if (issueRows.length === 0) return res.status(404).json({ error: '问题不存在' });
+
+    const rows = await query(
+      'SELECT * FROM issue_comments WHERE issue_id = ? ORDER BY created_at ASC, id ASC',
+      [req.params.id]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('查询评论失败:', err);
+    res.status(500).json({ error: '查询评论失败', message: err.message });
+  }
+});
+
+// 发表评论
+router.post('/api/issues/:id/comments', async (req, res) => {
+  try {
+    const issueRows = await query('SELECT id FROM issues WHERE id = ?', [req.params.id]);
+    if (issueRows.length === 0) return res.status(404).json({ error: '问题不存在' });
+
+    const { content, author } = req.body;
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ error: '参数校验失败', message: 'content 必填且不能为空' });
+    }
+    const result = await query(
+      'INSERT INTO issue_comments (issue_id, content, author) VALUES (?, ?, ?)',
+      [req.params.id, String(content).trim(), author || null]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) {
+    console.error('发表评论失败:', err);
+    res.status(500).json({ error: '发表评论失败', message: err.message });
+  }
+});
+
 module.exports = router;

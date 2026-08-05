@@ -201,3 +201,57 @@ test('PUT 不存在 → 404；非法 status → 400；DELETE 不存在 → 404',
   const delNotFound = await fetch(`${baseUrl}/api/issues/999999`, { method: 'DELETE' });
   assert.strictEqual(delNotFound.status, 404);
 });
+
+test('评论：POST 落库、GET 正序；空 content → 400；问题不存在 → 404', async () => {
+  const created = await (await createIssue({ title: '评论问题' })).json();
+
+  const empty = await fetch(`${baseUrl}/api/issues/${created.id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: '  ' }),
+  });
+  assert.strictEqual(empty.status, 400);
+
+  await fetch(`${baseUrl}/api/issues/${created.id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: '第一条评论', author: '张三' }),
+  });
+  await fetch(`${baseUrl}/api/issues/${created.id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: '第二条评论', author: '李四' }),
+  });
+
+  const list = await fetch(`${baseUrl}/api/issues/${created.id}/comments`);
+  assert.strictEqual(list.status, 200);
+  const body = await list.json();
+  assert.strictEqual(body.data.length, 2);
+  assert.strictEqual(body.data[0].content, '第一条评论');
+  assert.strictEqual(body.data[0].author, '张三');
+  assert.strictEqual(body.data[1].content, '第二条评论');
+
+  const notFound = await fetch(`${baseUrl}/api/issues/999999/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: '孤儿评论' }),
+  });
+  assert.strictEqual(notFound.status, 404);
+});
+
+test('DELETE 问题后评论级联删除', async () => {
+  const created = await (await createIssue({ title: '待删问题' })).json();
+  await fetch(`${baseUrl}/api/issues/${created.id}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: '将被级联删除' }),
+  });
+
+  const del = await fetch(`${baseUrl}/api/issues/${created.id}`, { method: 'DELETE' });
+  assert.strictEqual(del.status, 200);
+
+  const issues = await db.query('SELECT * FROM issues WHERE id = ?', [created.id]);
+  assert.strictEqual(issues.length, 0);
+  const comments = await db.query('SELECT * FROM issue_comments WHERE issue_id = ?', [created.id]);
+  assert.strictEqual(comments.length, 0, '评论应随问题级联删除');
+});
