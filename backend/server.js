@@ -535,7 +535,7 @@ app.get('/api/projects', async (req, res) => {
 
     // 排序字段白名单，未识别回退 id DESC
     const SORTABLE_COLUMNS = new Set([
-      'project_status', 'health_status', 'planned_start_date', 'planned_end_date',
+      'project_status', 'health_status', 'planned_start_date', 'planned_end_date', 'last_progress_date',
     ]);
     let orderBy = ' ORDER BY id DESC';
     if (SORTABLE_COLUMNS.has(req.query.sort)) {
@@ -544,7 +544,12 @@ app.get('/api/projects', async (req, res) => {
     }
 
     // LIMIT/OFFSET 直接拼入 SQL，避免部分 MySQL 版本对占位符的支持问题
-    const rows = await query(`SELECT * FROM projects${where}${orderBy} LIMIT ${size} OFFSET ${offset}`, params);
+    const rows = await query(
+      `SELECT projects.*,
+              (SELECT MAX(report_date) FROM project_progress pp WHERE pp.project_id = projects.id) AS last_progress_date
+       FROM projects${where}${orderBy} LIMIT ${size} OFFSET ${offset}`,
+      params
+    );
     const [countRow] = await query(`SELECT COUNT(*) AS total FROM projects${where}`, params);
 
     res.json({ success: true, data: rows, total: countRow.total });
@@ -737,6 +742,38 @@ app.delete('/api/progress/:id', async (req, res) => {
   } catch (err) {
     console.error('删除进展失败:', err);
     res.status(500).json({ error: '删除进展失败', message: err.message });
+  }
+});
+
+// 首页进展概览：最近更新 + 进展滞后/未填报（stale 排除已结项项目）
+app.get('/api/progress/overview', async (req, res) => {
+  try {
+    const recent = await query(
+      `SELECT pp.id, pp.project_id, p.project_name, pp.report_date, pp.completed_content, pp.tags, pp.reporter
+       FROM project_progress pp
+       JOIN projects p ON p.id = pp.project_id
+       ORDER BY pp.report_date DESC, pp.id DESC
+       LIMIT 5`
+    );
+
+    const stale = await query(
+      `SELECT p.id AS project_id, p.project_name,
+              (SELECT MAX(report_date) FROM project_progress pp WHERE pp.project_id = p.id) AS last_progress_date,
+              DATEDIFF(CURDATE(), (SELECT MAX(report_date) FROM project_progress pp WHERE pp.project_id = p.id)) AS days_stale
+       FROM projects p
+       WHERE (p.project_status IS NULL OR p.project_status != '已结项')
+         AND (
+           NOT EXISTS (SELECT 1 FROM project_progress pp WHERE pp.project_id = p.id)
+           OR DATEDIFF(CURDATE(), (SELECT MAX(report_date) FROM project_progress pp WHERE pp.project_id = p.id)) > ?
+         )
+       ORDER BY last_progress_date ASC, p.id ASC`,
+      [STALE_DAYS]
+    );
+
+    res.json({ success: true, data: { recent, stale } });
+  } catch (err) {
+    console.error('查询进展概览失败:', err);
+    res.status(500).json({ error: '查询进展概览失败', message: err.message });
   }
 });
 
