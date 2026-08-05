@@ -1063,3 +1063,17 @@ th.sortable:hover {
 .stale-text { color: var(--ruby); font-size: 12px; }
 .never-text { color: var(--ink-mute); font-size: 12px; }
 .stale-date { color: var(--ruby); font-weight: 500; }
+
+/* 问题严重程度 / 状态标识 */
+.badge-severity-normal { background: rgba(0, 0, 0, 0.06); color: var(--ink-secondary); }
+.badge-severity-important { background: rgba(245, 166, 35, 0.15); color: #b26a00; }
+.badge-severity-urgent { background: rgba(234, 34, 97, 0.12); color: var(--ruby); }
+.badge-issue-new { background: rgba(47, 122, 191, 0.12); color: #2f7abf; }
+.badge-issue-doing { background: rgba(245, 166, 35, 0.15); color: #b26a00; }
+.badge-issue-confirm { background: rgba(126, 87, 194, 0.12); color: #7e57c2; }
+.badge-issue-resolved { background: rgba(46, 125, 50, 0.12); color: #2e7d32; }
+.badge-issue-closed { background: rgba(0, 0, 0, 0.06); color: var(--ink-mute); }
+
+/* 逾期问题 */
+.issue-overdue-row { background: rgba(234, 34, 97, 0.05); }
+.overdue-text { color: var(--ruby); font-size: 12px; font-weight: 500; }

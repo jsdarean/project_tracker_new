@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>问题跟踪</title>
+  <link rel="stylesheet" href="style.css?v=27">
+  <style>
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-md);
+      margin-bottom: var(--space-md);
+    }
+    .stat-card {
+      padding: var(--space-md) var(--space-lg);
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.1s ease;
+    }
+    .stat-card:hover { transform: translateY(-1px); }
+    .stat-num { font-size: 28px; font-weight: 500; color: var(--ink); }
+    .stat-num.stat-danger { color: var(--ruby); }
+    .stat-label { font-size: 13px; color: var(--ink-secondary); margin-top: 2px; }
+    .issues-table th, .issues-table td { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-mesh" aria-hidden="true"></div>
+    <div class="container hero-content">
+      <header class="page-header">
+        <div class="page-title">
+          <h1>问题跟踪</h1>
+        </div>
+        <a href="index.html" class="btn-secondary settings-btn">返回首页</a>
+        <a href="issue_detail.html?new=1" class="btn-primary settings-btn">新建问题</a>
+      </header>
+    </div>
+  </div>
+
+  <main class="container">
+    <div class="stats-row">
+      <div class="card stat-card" id="statTotal"><div class="stat-num">-</div><div class="stat-label">问题总数</div></div>
+      <div class="card stat-card" id="statOpen"><div class="stat-num">-</div><div class="stat-label">待处理</div></div>
+      <div class="card stat-card" id="statOverdue"><div class="stat-num stat-danger">-</div><div class="stat-label">逾期</div></div>
+      <div class="card stat-card" id="statClosed"><div class="stat-num">-</div><div class="stat-label">已关闭</div></div>
+    </div>
+
+    <div class="toolbar card">
+      <select id="statusFilter">
+        <option value="">全部状态</option>
+        <option value="新建">新建</option>
+        <option value="处理中">处理中</option>
+        <option value="待确认">待确认</option>
+        <option value="已解决">已解决</option>
+        <option value="已关闭">已关闭</option>
+      </select>
+      <select id="severityFilter">
+        <option value="">全部严重程度</option>
+        <option value="一般">一般</option>
+        <option value="重要">重要</option>
+        <option value="紧急">紧急</option>
+      </select>
+      <select id="projectFilter">
+        <option value="">全部项目</option>
+      </select>
+      <input type="text" id="assigneeFilter" placeholder="责任人">
+      <input type="text" id="keywordFilter" placeholder="搜索问题编号、标题…">
+      <button id="refreshBtn" class="btn-primary">刷新</button>
+    </div>
+
+    <div id="loading" class="loading card">加载中...</div>
+    <div id="error" class="error card" style="display: none;"></div>
+
+    <div class="table-wrapper card">
+      <table id="issuesTable" class="issues-table">
+        <thead>
+          <tr>
+            <th>问题编号</th>
+            <th>标题</th>
+            <th>所属项目</th>
+            <th>严重程度</th>
+            <th>责任人</th>
+            <th>状态</th>
+            <th>期望解决日期</th>
+            <th>逾期</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="pagination">
+      <button id="prevBtn" class="btn-secondary">上一页</button>
+      <span id="pageInfo">第 1 页</span>
+      <button id="nextBtn" class="btn-secondary">下一页</button>
+    </div>
+  </main>
+
+  <script src="issues.js"></script>
+</body>
+</html>
