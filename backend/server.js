@@ -9,6 +9,7 @@ const { exec, spawn } = require('child_process');
 const { query, initDatabase, projectColumns, contactColumns, setDbConfig, getDbConfig } = require('./db');
 const { extract } = require('./extractor');
 const issuesRouter = require('./routes/issues');
+const { loadSettings, saveSettings, EMAIL_DEFAULTS } = require('./settings-store');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,17 +18,6 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-
-// 本地归档设置文件
-const SETTINGS_FILE = path.join(__dirname, 'settings.json');
-
-// 默认导出字段（排除系统字段）
-const defaultExportFields = projectColumns
-  .map(def => {
-    const m = def.match(/^`([^`]+)`/);
-    return m ? m[1] : '';
-  })
-  .filter(f => f && !['id', 'created_at', 'updated_at', 'status'].includes(f));
 
 // 联系人可维护字段
 const contactFields = ['city', 'company', 'department', 'position', 'name', 'phone', 'email', 'remarks', 'related_project'];
@@ -55,34 +45,6 @@ function validateTrackingFields(data) {
     }
   }
   return null;
-}
-
-async function loadSettings() {
-  const dbCfg = getDbConfig();
-  const defaults = {
-    archive_folder: '',
-    download_dir: path.join(process.env.USERPROFILE || process.env.HOME || '', 'Downloads'),
-    db_host: dbCfg.host,
-    db_port: dbCfg.port,
-    db_user: dbCfg.user,
-    db_password: dbCfg.password,
-    db_name: dbCfg.database,
-    export_fields: defaultExportFields,
-    watch_tags: [
-      { name: '领导关注', color: '#ea2261' },
-      { name: '涉及考核', color: '#9b6829' },
-    ],
-  };
-  try {
-    const raw = await fs.readFile(SETTINGS_FILE, 'utf8');
-    return { ...defaults, ...JSON.parse(raw) };
-  } catch (err) {
-    return defaults;
-  }
-}
-
-async function saveSettings(settings) {
-  await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
 }
 
 // 字段 -> 中文注释映射
@@ -114,7 +76,10 @@ app.get('/health', (req, res) => {
 app.get('/api/settings', async (req, res) => {
   try {
     const settings = await loadSettings();
-    res.json({ success: true, data: settings });
+    const masked = { ...settings };
+    if (masked.smtp_pass) masked.smtp_pass = '';
+    if (masked.imap_pass) masked.imap_pass = '';
+    res.json({ success: true, data: masked });
   } catch (err) {
     console.error('读取设置失败:', err);
     res.status(500).json({ error: '读取设置失败', message: err.message });
@@ -125,6 +90,7 @@ app.get('/api/settings', async (req, res) => {
 app.post('/api/settings', async (req, res) => {
   try {
     const body = req.body || {};
+    const old = await loadSettings();
     const folder = String(body.archive_folder || '').trim();
     const dldir = String(body.download_dir || '').trim();
     const dbHost = String(body.db_host || '').trim() || 'localhost';
@@ -134,7 +100,7 @@ app.post('/api/settings', async (req, res) => {
     const dbName = String(body.db_name || '').trim() || 'project_tracker';
     const exportFields = Array.isArray(body.export_fields)
       ? body.export_fields.filter(f => typeof f === 'string' && f)
-      : defaultExportFields;
+      : old.export_fields;
 
     // 关注标签配置：保留旧值兜底，过滤非法项
     let watchTags;
@@ -146,7 +112,6 @@ app.post('/api/settings', async (req, res) => {
           color: /^#[0-9a-fA-F]{6}$/.test(t.color || '') ? t.color : '#533afd',
         }));
     } else {
-      const old = await loadSettings();
       watchTags = old.watch_tags;
     }
 
@@ -198,6 +163,15 @@ app.post('/api/settings', async (req, res) => {
       export_fields: exportFields,
       watch_tags: watchTags,
     };
+    // 邮件催办配置：body 未传保留旧值，密码空字符串表示不修改，imap 状态原样保留
+    for (const [key, def] of Object.entries(EMAIL_DEFAULTS)) {
+      if (key === 'smtp_pass' || key === 'imap_pass') continue;
+      settings[key] = body[key] !== undefined ? body[key] : (old[key] !== undefined ? old[key] : def);
+    }
+    settings.smtp_pass = body.smtp_pass ? String(body.smtp_pass) : (old.smtp_pass || '');
+    settings.imap_pass = body.imap_pass ? String(body.imap_pass) : (old.imap_pass || '');
+    if (old.imap_last_uid !== undefined) settings.imap_last_uid = old.imap_last_uid;
+    if (old.imap_uidvalidity !== undefined) settings.imap_uidvalidity = old.imap_uidvalidity;
     await saveSettings(settings);
 
     // 立即应用数据库配置
