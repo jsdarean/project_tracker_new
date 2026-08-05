@@ -87,6 +87,7 @@ function initEditMode() {
   const closed = CLOSED_STATUSES.includes(currentIssue.status);
   reopenBtn.style.display = closed ? '' : 'none';
   deleteBtn.style.display = '';
+  solutionHistory.style.display = 'none';
   if (closed && currentIssue.solution) {
     solutionHistory.style.display = 'block';
     solutionText.textContent = currentIssue.solution;
