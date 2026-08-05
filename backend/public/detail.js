@@ -29,6 +29,10 @@ const pfNextPlan = document.getElementById('pfNextPlan');
 const pfRisk = document.getElementById('pfRisk');
 const pfReporter = document.getElementById('pfReporter');
 const tagCheckboxes = Array.from(document.querySelectorAll('.progress-tag-cb'));
+const issuesSection = document.getElementById('issuesSection');
+const issuesError = document.getElementById('issuesError');
+const issuesList = document.getElementById('issuesList');
+const issueAddLink = document.getElementById('issueAddLink');
 
 let editingProgressId = null;
 
@@ -93,6 +97,8 @@ async function init() {
       if (delBtn) deleteProgress(delBtn.getAttribute('data-id'));
     });
     loadProgress();
+    issueAddLink.href = `issue_detail.html?new=1&project_id=${projectId}`;
+    loadIssues();
     hideLoading();
     detailCard.style.display = 'block';
   } catch (err) {
@@ -266,6 +272,45 @@ async function deleteProgress(id) {
   } catch (err) {
     alert('删除失败：' + err.message);
   }
+}
+
+function severityClass(s) {
+  return { '一般': 'normal', '重要': 'important', '紧急': 'urgent' }[s] || 'normal';
+}
+
+function issueStatusClass(s) {
+  return { '新建': 'new', '处理中': 'doing', '待确认': 'confirm', '已解决': 'resolved', '已关闭': 'closed' }[s] || 'new';
+}
+
+async function loadIssues() {
+  issuesError.style.display = 'none';
+  try {
+    const resp = await fetch(`${API_BASE}/api/issues?project_id=${projectId}&pageSize=100`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.error || '加载问题失败');
+    renderIssues(result.data || []);
+  } catch (err) {
+    issuesList.innerHTML = '';
+    issuesError.textContent = '问题加载失败：' + err.message;
+    issuesError.style.display = 'block';
+  }
+}
+
+function renderIssues(items) {
+  if (items.length === 0) {
+    issuesList.innerHTML = '<div class="issues-empty">暂无问题记录</div>';
+    return;
+  }
+  issuesList.innerHTML = items.map(issue => `
+    <div class="issue-row">
+      <a class="issue-no" href="issue_detail.html?id=${issue.id}">${escapeHtml(issue.issue_no)}</a>
+      <span class="issue-title">${escapeHtml(issue.title)}</span>
+      <span class="badge badge-severity-${severityClass(issue.severity)}">${escapeHtml(issue.severity)}</span>
+      <span class="badge badge-issue-${issueStatusClass(issue.status)}">${escapeHtml(issue.status)}</span>
+      <span class="issue-due">${issue.due_date ? '期望 ' + formatDate(issue.due_date) : ''}</span>
+      ${issue.is_overdue ? `<span class="overdue-text">逾期 ${issue.overdue_days} 天</span>` : ''}
+    </div>`).join('');
 }
 
 function statusClass(status) {

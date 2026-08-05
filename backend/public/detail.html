@@ -135,6 +135,22 @@
     .modal-field textarea { resize: vertical; line-height: 1.6; }
     .modal-tags { display: flex; gap: var(--space-lg); font-size: 14px; color: var(--ink); }
     .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; }
+    /* 问题列表分区 */
+    .detail-issues { padding: 0 var(--space-lg) var(--space-lg); }
+    .issue-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-xs) 0;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+    .issue-row:last-child { border-bottom: none; }
+    .issue-row .issue-no { color: var(--primary); }
+    .issue-row .issue-title { color: var(--ink); flex: 1; min-width: 200px; }
+    .issue-row .issue-due { color: var(--ink-mute); font-size: 12px; }
+    .issues-empty { color: var(--ink-mute); font-size: 14px; padding: var(--space-md) 0; }
   </style>
 </head>
 <body>
@@ -172,6 +188,17 @@
         </div>
         <div id="progressError" class="error" style="display: none;"></div>
         <div id="progressTimeline" class="progress-timeline"></div>
+      </section>
+
+      <section id="issuesSection" class="detail-section">
+        <div class="progress-header">
+          <h2>问题列表</h2>
+          <div class="progress-controls">
+            <a id="issueAddLink" href="#" class="btn-primary">新建问题</a>
+          </div>
+        </div>
+        <div id="issuesError" class="error" style="display: none;"></div>
+        <div id="issuesList" class="detail-issues"></div>
       </section>
 
       <div id="detailBodyAfter"></div>
