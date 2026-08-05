@@ -19,6 +19,7 @@ const pageInfo = document.getElementById('pageInfo');
 
 // 统计卡片快捷筛选：点击"待处理"/"逾期"时设置对应筛选条件
 let overdueOnly = false;
+let quickStatus = '';
 
 async function init() {
   bindEvents();
@@ -61,7 +62,8 @@ async function loadData() {
   hideError();
   try {
     const params = new URLSearchParams({ page: currentPage, pageSize });
-    if (statusFilter.value) params.append('status', statusFilter.value);
+    const statusVal = quickStatus || statusFilter.value;
+    if (statusVal) params.append('status', statusVal);
     if (severityFilter.value) params.append('severity', severityFilter.value);
     if (projectFilter.value) params.append('project_id', projectFilter.value);
     if (assigneeFilter.value.trim()) params.append('assignee', assigneeFilter.value.trim());
@@ -124,26 +126,28 @@ function updatePagination() {
 function bindEvents() {
   const reload = () => { currentPage = 1; loadData(); };
   refreshBtn.addEventListener('click', reload);
-  statusFilter.addEventListener('change', () => { overdueOnly = false; reload(); });
+  statusFilter.addEventListener('change', () => { quickStatus = ''; overdueOnly = false; reload(); });
   severityFilter.addEventListener('change', reload);
   projectFilter.addEventListener('change', reload);
   keywordFilter.addEventListener('input', reload);
   assigneeFilter.addEventListener('input', reload);
 
   document.getElementById('statOpen').addEventListener('click', () => {
+    quickStatus = '新建,处理中,待确认';
     overdueOnly = false;
     statusFilter.value = '';
-    const params = '新建,处理中,待确认';
     currentPage = 1;
     // 快捷筛选直接走后端多值，不改下拉显示
-    loadDataWith({ status: params });
+    loadData();
   });
   document.getElementById('statOverdue').addEventListener('click', () => {
+    quickStatus = '';
     overdueOnly = true;
     statusFilter.value = '';
     reload();
   });
   document.getElementById('statTotal').addEventListener('click', () => {
+    quickStatus = '';
     overdueOnly = false;
     statusFilter.value = '';
     severityFilter.value = '';
@@ -151,6 +155,7 @@ function bindEvents() {
     reload();
   });
   document.getElementById('statClosed').addEventListener('click', () => {
+    quickStatus = '';
     overdueOnly = false;
     statusFilter.value = '已关闭';
     reload();
@@ -163,30 +168,6 @@ function bindEvents() {
     const totalPages = Math.ceil(total / pageSize) || 1;
     if (currentPage < totalPages) { currentPage++; loadData(); }
   });
-}
-
-// 统计卡片快捷筛选专用：临时合并额外参数
-async function loadDataWith(extra) {
-  showLoading(true);
-  hideError();
-  try {
-    const params = new URLSearchParams({ page: currentPage, pageSize });
-    if (extra.status) params.append('status', extra.status);
-    if (severityFilter.value) params.append('severity', severityFilter.value);
-    if (projectFilter.value) params.append('project_id', projectFilter.value);
-    if (assigneeFilter.value.trim()) params.append('assignee', assigneeFilter.value.trim());
-    if (keywordFilter.value.trim()) params.append('keyword', keywordFilter.value.trim());
-    const resp = await fetch(`${API_BASE}/api/issues?${params.toString()}`);
-    const result = await resp.json();
-    if (!result.success) throw new Error(result.error || '加载失败');
-    total = result.total || 0;
-    renderTable(result.data || []);
-    updatePagination();
-  } catch (err) {
-    showError('加载失败：' + err.message);
-  } finally {
-    showLoading(false);
-  }
 }
 
 function showLoading(show) { loadingEl.style.display = show ? 'block' : 'none'; }
