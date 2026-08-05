@@ -255,3 +255,37 @@ test('DELETE 问题后评论级联删除', async () => {
   const comments = await db.query('SELECT * FROM issue_comments WHERE issue_id = ?', [created.id]);
   assert.strictEqual(comments.length, 0, '评论应随问题级联删除');
 });
+
+test('PUT 终态问题不带 solution 的部分更新 → 200，沿用存量方案', async () => {
+  const created = await (await createIssue({ title: '终态编辑' })).json();
+  // 先置为已解决（带方案）
+  const resolve = await fetch(`${baseUrl}/api/issues/${created.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: '已解决', solution: '已修复', resolved_at: '2026-08-03' }),
+  });
+  assert.strictEqual(resolve.status, 200);
+
+  // 带 status 不带 solution 的部分更新（模拟详情页保存行为）
+  const edit = await fetch(`${baseUrl}/api/issues/${created.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: '已解决', assignee: '王五' }),
+  });
+  assert.strictEqual(edit.status, 200);
+  let rows = await db.query('SELECT * FROM issues WHERE id = ?', [created.id]);
+  assert.strictEqual(rows[0].assignee, '王五');
+  assert.strictEqual(rows[0].solution, '已修复', 'solution 应保留');
+  assert.strictEqual(rows[0].resolved_at, '2026-08-03', 'resolved_at 应保留');
+
+  // 已解决 → 已关闭（不带 solution，沿用存量）
+  const close = await fetch(`${baseUrl}/api/issues/${created.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: '已关闭' }),
+  });
+  assert.strictEqual(close.status, 200);
+  rows = await db.query('SELECT * FROM issues WHERE id = ?', [created.id]);
+  assert.strictEqual(rows[0].status, '已关闭');
+  assert.strictEqual(rows[0].solution, '已修复');
+});

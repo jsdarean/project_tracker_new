@@ -217,16 +217,33 @@ router.post('/api/issues', async (req, res) => {
 router.put('/api/issues/:id', async (req, res) => {
   try {
     const data = req.body;
-    const invalid = validateIssuePayload(data, true) || validateTerminal(data);
+    const invalid = validateIssuePayload(data, true);
     if (invalid) return res.status(400).json({ error: '参数校验失败', message: invalid });
+
+    // 先读存量行：判存在 + 供终态校验读取历史 solution/resolved_at
+    const existing = await query('SELECT * FROM issues WHERE id = ?', [req.params.id]);
+    if (existing.length === 0) return res.status(404).json({ error: '问题不存在' });
+    const current = existing[0];
+
+    // 终态校验：显式传非空 solution → 通过；未传/空串 → 存量 solution 非空视为保留历史方案，否则 400
+    if (data.status && ISSUE_CLOSED_STATUSES.includes(data.status)) {
+      const hasNewSolution = data.solution !== undefined && data.solution !== null && String(data.solution).trim();
+      if (!hasNewSolution) {
+        if (current.solution && String(current.solution).trim()) {
+          delete data.solution; // 保留历史方案：不把空值写入 updates
+        } else {
+          return res.status(400).json({ error: '参数校验失败', message: '置为已解决/已关闭时 solution（解决方案）必填' });
+        }
+      }
+      // 终态未传 resolved_at 且存量也为 NULL 时才默认填今天（已终态的编辑不清空历史日期）
+      if (!data.resolved_at && !current.resolved_at) {
+        data.resolved_at = todayLocal();
+      }
+    }
 
     if (data.project_id) {
       const projectRows = await query('SELECT id FROM projects WHERE id = ?', [data.project_id]);
       if (projectRows.length === 0) return res.status(404).json({ error: '项目不存在' });
-    }
-    // 终态未传 resolved_at 时默认填今天
-    if (data.status && ISSUE_CLOSED_STATUSES.includes(data.status) && !data.resolved_at) {
-      data.resolved_at = todayLocal();
     }
 
     const updates = [];
@@ -238,9 +255,6 @@ router.put('/api/issues/:id', async (req, res) => {
       }
     }
     if (updates.length === 0) return res.status(400).json({ error: '没有可更新字段' });
-
-    const existing = await query('SELECT id FROM issues WHERE id = ?', [req.params.id]);
-    if (existing.length === 0) return res.status(404).json({ error: '问题不存在' });
 
     values.push(req.params.id);
     await query(`UPDATE issues SET ${updates.join(',')} WHERE id = ?`, values);

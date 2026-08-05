@@ -152,13 +152,16 @@ function bindEvents() {
     statusFilter.value = '';
     severityFilter.value = '';
     projectFilter.value = '';
+    assigneeFilter.value = '';
+    keywordFilter.value = '';
     reload();
   });
   document.getElementById('statClosed').addEventListener('click', () => {
-    quickStatus = '';
+    quickStatus = '已解决,已关闭';
     overdueOnly = false;
-    statusFilter.value = '已关闭';
-    reload();
+    statusFilter.value = '';
+    currentPage = 1;
+    loadData();
   });
 
   prevBtn.addEventListener('click', () => {
