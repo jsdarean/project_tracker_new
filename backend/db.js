@@ -163,6 +163,7 @@ const issueColumns = [
   '`resolved_at` DATE DEFAULT NULL COMMENT \'实际解决日期\'',
   '`solution` TEXT COMMENT \'解决方案\'',
   '`created_by` VARCHAR(100) DEFAULT NULL COMMENT \'创建人\'',
+  '`escalation_muted` TINYINT NOT NULL DEFAULT 0 COMMENT \'暂停催办（1=暂停）\'',
   '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
   '`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT \'更新时间\'',
 ];
@@ -173,6 +174,47 @@ const issueCommentColumns = [
   '`issue_id` INT NOT NULL COMMENT \'问题 ID\'',
   '`content` TEXT NOT NULL COMMENT \'评论内容\'',
   '`author` VARCHAR(100) DEFAULT NULL COMMENT \'评论人\'',
+  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
+];
+
+// 邮件模板表字段定义（占位符 {{var}}，渲染时替换）
+const emailTemplateColumns = [
+  '`id` INT NOT NULL AUTO_INCREMENT COMMENT \'序号\'',
+  '`code` VARCHAR(50) NOT NULL COMMENT \'模板编码\'',
+  '`name` VARCHAR(100) DEFAULT NULL COMMENT \'模板名称\'',
+  '`subject` VARCHAR(500) DEFAULT NULL COMMENT \'邮件主题（支持占位符）\'',
+  '`body` TEXT COMMENT \'邮件正文（支持占位符）\'',
+  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
+];
+
+// 邮件发送日志表字段定义（status: sent/failed/bounced/skipped）
+const emailLogColumns = [
+  '`id` INT NOT NULL AUTO_INCREMENT COMMENT \'序号\'',
+  '`issue_id` INT DEFAULT NULL COMMENT \'关联问题 ID（进展提醒为 NULL）\'',
+  '`rule_id` INT DEFAULT NULL COMMENT \'触发规则 ID\'',
+  '`message_id` VARCHAR(255) DEFAULT NULL COMMENT \'发件 Message-ID（退信匹配用）\'',
+  '`token` VARCHAR(64) DEFAULT NULL COMMENT \'ack 一次性令牌（用后清空）\'',
+  '`recipients` TEXT COMMENT \'收件人（逗号分隔）\'',
+  '`cc` TEXT COMMENT \'抄送（逗号分隔）\'',
+  '`subject` VARCHAR(500) DEFAULT NULL COMMENT \'邮件主题\'',
+  '`body` TEXT COMMENT \'邮件正文\'',
+  '`status` VARCHAR(20) NOT NULL COMMENT \'状态（sent/failed/bounced/skipped）\'',
+  '`error_msg` TEXT COMMENT \'失败/退信原因（截 500 字）\'',
+  '`sent_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'发送时间\'',
+];
+
+// 催办规则表字段定义
+const escalationRuleColumns = [
+  '`id` INT NOT NULL AUTO_INCREMENT COMMENT \'序号\'',
+  '`name` VARCHAR(100) NOT NULL COMMENT \'规则名称\'',
+  '`severity` VARCHAR(20) DEFAULT NULL COMMENT \'适用严重程度（空=全部）\'',
+  '`days_before_due` INT DEFAULT NULL COMMENT \'临期 N 天触发\'',
+  '`days_after_due` INT DEFAULT NULL COMMENT \'逾期 N 天触发\'',
+  '`to_roles` VARCHAR(100) NOT NULL COMMENT \'收件人角色（assignee/manager/leader 逗号分隔）\'',
+  '`cc_roles` VARCHAR(100) DEFAULT NULL COMMENT \'抄送角色\'',
+  '`template_code` VARCHAR(50) DEFAULT NULL COMMENT \'模板编码（缺失用内置兜底）\'',
+  '`enabled` TINYINT NOT NULL DEFAULT 1 COMMENT \'是否启用\'',
+  '`min_interval_hours` INT NOT NULL DEFAULT 24 COMMENT \'同问题同规则最小发送间隔（小时）\'',
   '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
 ];
 
@@ -388,6 +430,106 @@ async function initDatabase() {
     await db.query(`ALTER TABLE \`issue_comments\` MODIFY COLUMN ${colDef}`);
   }
 
+  // 创建邮件模板表
+  const createEmailTemplatesSql = `
+    CREATE TABLE IF NOT EXISTS \`email_templates\` (
+      ${emailTemplateColumns.join(',\n      ')},
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uk_template_code\` (\`code\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createEmailTemplatesSql);
+
+  const [existingTplCols] = await db.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [dbName, 'email_templates']
+  );
+  const existingTplSet = new Set(existingTplCols.map(c => c.COLUMN_NAME));
+  for (const colDef of emailTemplateColumns) {
+    const colName = parseColumnName(colDef);
+    if (!existingTplSet.has(colName)) {
+      await db.query(`ALTER TABLE \`email_templates\` ADD COLUMN ${colDef}`);
+      console.log('新增邮件模板表字段:', colName);
+    }
+  }
+  for (const colDef of emailTemplateColumns) {
+    await db.query(`ALTER TABLE \`email_templates\` MODIFY COLUMN ${colDef}`);
+  }
+
+  // 创建邮件发送日志表
+  const createEmailLogsSql = `
+    CREATE TABLE IF NOT EXISTS \`email_logs\` (
+      ${emailLogColumns.join(',\n      ')},
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uk_email_token\` (\`token\`),
+      KEY \`idx_log_issue_id\` (\`issue_id\`),
+      KEY \`idx_log_message_id\` (\`message_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createEmailLogsSql);
+
+  const [existingLogCols] = await db.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [dbName, 'email_logs']
+  );
+  const existingLogSet = new Set(existingLogCols.map(c => c.COLUMN_NAME));
+  for (const colDef of emailLogColumns) {
+    const colName = parseColumnName(colDef);
+    if (!existingLogSet.has(colName)) {
+      await db.query(`ALTER TABLE \`email_logs\` ADD COLUMN ${colDef}`);
+      console.log('新增邮件日志表字段:', colName);
+    }
+  }
+  for (const colDef of emailLogColumns) {
+    await db.query(`ALTER TABLE \`email_logs\` MODIFY COLUMN ${colDef}`);
+  }
+
+  // 创建催办规则表
+  const createEscalationRulesSql = `
+    CREATE TABLE IF NOT EXISTS \`escalation_rules\` (
+      ${escalationRuleColumns.join(',\n      ')},
+      PRIMARY KEY (\`id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createEscalationRulesSql);
+
+  const [existingRuleCols] = await db.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [dbName, 'escalation_rules']
+  );
+  const existingRuleSet = new Set(existingRuleCols.map(c => c.COLUMN_NAME));
+  for (const colDef of escalationRuleColumns) {
+    const colName = parseColumnName(colDef);
+    if (!existingRuleSet.has(colName)) {
+      await db.query(`ALTER TABLE \`escalation_rules\` ADD COLUMN ${colDef}`);
+      console.log('新增催办规则表字段:', colName);
+    }
+  }
+  for (const colDef of escalationRuleColumns) {
+    await db.query(`ALTER TABLE \`escalation_rules\` MODIFY COLUMN ${colDef}`);
+  }
+
+  // 邮件催办种子数据（仅当表为空时插入）
+  const [ruleCount] = await db.execute('SELECT COUNT(*) AS c FROM escalation_rules');
+  if (ruleCount[0].c === 0) {
+    await db.query(
+      `INSERT INTO escalation_rules (name, severity, days_before_due, days_after_due, to_roles, cc_roles, template_code, enabled, min_interval_hours) VALUES
+       ('临期 1 天提醒责任人', NULL, 1, NULL, 'assignee', NULL, 'issue_escalation', 1, 24),
+       ('逾期 1 天提醒责任人并抄送项目经理', NULL, NULL, 1, 'assignee', 'manager', 'issue_escalation', 1, 24),
+       ('逾期 3 天升级抄送部门领导', NULL, NULL, 3, 'assignee', 'manager,leader', 'issue_escalation', 1, 24)`
+    );
+    console.log('插入默认催办规则: 3 条');
+  }
+  const [tplCount] = await db.execute('SELECT COUNT(*) AS c FROM email_templates');
+  if (tplCount[0].c === 0) {
+    await db.query(
+      `INSERT INTO email_templates (code, name, subject, body) VALUES
+       ('issue_escalation', '问题催办', '【项目问题催办】{{issue_no}} {{title}}', '问题编号：{{issue_no}}\n问题标题：{{title}}\n所属项目：{{project_name}}\n责任人：{{assignee}}\n期望解决日期：{{due_date}}\n逾期天数：{{overdue_days}}\n\n问题链接：{{detail_url}}\n我已处理：{{ack_url}}\n'),
+       ('progress_reminder', '每周进展提醒', '【进展提醒】以下项目超过 14 天未更新进展', '以下项目超过 14 天未更新进展（或从未填报），请提醒项目经理及时填报：\n\n{{stale_projects}}\n\n项目跟踪系统')`
+    );
+    console.log('插入默认邮件模板: 2 个');
+  }
+
   console.log('数据库与表初始化完成:', dbName);
 }
 
@@ -402,6 +544,7 @@ module.exports = {
   progressColumns,
   issueColumns,
   issueCommentColumns,
+  emailTemplateColumns, emailLogColumns, escalationRuleColumns,
   setDbConfig,
   getDbConfig,
 };

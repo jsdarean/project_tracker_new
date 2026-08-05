@@ -89,3 +89,42 @@ test('issues 与 issue_comments 表已创建，字段与索引齐全', async () 
   const commentIdxNames = new Set(commentIdx.map((i) => i.INDEX_NAME));
   assert.ok(commentIdxNames.has('idx_comment_issue_id'), '缺少索引 idx_comment_issue_id');
 });
+
+test('邮件催办三表、issues.escalation_muted 列与种子数据', async () => {
+  for (const table of ['email_templates', 'email_logs', 'escalation_rules']) {
+    const rows = await db.query(
+      `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = ?`, [table]
+    );
+    assert.strictEqual(rows[0].c, 1, `缺少表 ${table}`);
+  }
+
+  const logCols = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = 'email_logs'`
+  );
+  const logNames = new Set(logCols.map((c) => c.COLUMN_NAME));
+  for (const f of ['id', 'issue_id', 'rule_id', 'message_id', 'token', 'recipients', 'cc',
+    'subject', 'body', 'status', 'error_msg', 'sent_at']) {
+    assert.ok(logNames.has(f), `email_logs 缺少字段 ${f}`);
+  }
+
+  const muted = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = 'issues' AND COLUMN_NAME = 'escalation_muted'`
+  );
+  assert.strictEqual(muted.length, 1, 'issues 缺少 escalation_muted 列');
+
+  // 种子：3 条规则 + 2 个模板；重复迁移不重复插入
+  const rules = await db.query('SELECT * FROM escalation_rules ORDER BY id');
+  assert.strictEqual(rules.length, 3);
+  assert.strictEqual(rules[0].days_before_due, 1);
+  assert.strictEqual(rules[1].days_after_due, 1);
+  assert.strictEqual(rules[2].days_after_due, 3);
+  const templates = await db.query('SELECT * FROM email_templates ORDER BY id');
+  assert.strictEqual(templates.length, 2);
+
+  await db.initDatabase();
+  const rules2 = await db.query('SELECT COUNT(*) AS c FROM escalation_rules');
+  assert.strictEqual(rules2[0].c, 3, '重复迁移不应重复插入规则');
+});
