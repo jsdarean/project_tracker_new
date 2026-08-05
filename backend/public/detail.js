@@ -17,6 +17,20 @@ const progressFilterBtn = document.getElementById('progressFilterBtn');
 const progressClearBtn = document.getElementById('progressClearBtn');
 const progressError = document.getElementById('progressError');
 const progressTimeline = document.getElementById('progressTimeline');
+const progressAddBtn = document.getElementById('progressAddBtn');
+const progressModal = document.getElementById('progressModal');
+const progressModalTitle = document.getElementById('progressModalTitle');
+const progressModalError = document.getElementById('progressModalError');
+const progressForm = document.getElementById('progressForm');
+const progressCancelBtn = document.getElementById('progressCancelBtn');
+const pfReportDate = document.getElementById('pfReportDate');
+const pfCompleted = document.getElementById('pfCompleted');
+const pfNextPlan = document.getElementById('pfNextPlan');
+const pfRisk = document.getElementById('pfRisk');
+const pfReporter = document.getElementById('pfReporter');
+const tagCheckboxes = Array.from(document.querySelectorAll('.progress-tag-cb'));
+
+let editingProgressId = null;
 
 let progressItems = [];
 
@@ -64,6 +78,19 @@ async function init() {
       progressFrom.value = '';
       progressTo.value = '';
       loadProgress();
+    });
+    progressAddBtn.addEventListener('click', () => openProgressModal(null));
+    progressCancelBtn.addEventListener('click', closeProgressModal);
+    progressForm.addEventListener('submit', submitProgressForm);
+    progressTimeline.addEventListener('click', (e) => {
+      const editBtn = e.target.closest('.progress-edit');
+      if (editBtn) {
+        const item = progressItems.find(p => String(p.id) === editBtn.getAttribute('data-id'));
+        if (item) openProgressModal(item);
+        return;
+      }
+      const delBtn = e.target.closest('.progress-del');
+      if (delBtn) deleteProgress(delBtn.getAttribute('data-id'));
     });
     loadProgress();
     hideLoading();
@@ -150,7 +177,7 @@ function progressTagClass(tag) {
 
 function renderProgressTimeline(items) {
   if (items.length === 0) {
-    progressTimeline.innerHTML = '<div class="progress-empty">暂无进展记录</div>';
+    progressTimeline.innerHTML = '<div class="progress-empty">暂无进展记录，点击右上角「填报进展」录入第一条</div>';
     return;
   }
   progressTimeline.innerHTML = items.map(item => {
@@ -161,6 +188,10 @@ function renderProgressTimeline(items) {
         <span class="timeline-date">${formatDate(item.report_date)}</span>
         ${item.reporter ? `<span class="timeline-reporter">${escapeHtml(item.reporter)}</span>` : ''}
         ${tagsHtml}
+        <span class="timeline-actions">
+          <button class="btn-small progress-edit" data-id="${item.id}">编辑</button>
+          <button class="btn-small progress-del" data-id="${item.id}">删除</button>
+        </span>
       </div>
       <div class="timeline-body">
         <div class="timeline-field"><span class="timeline-label">完成内容</span><div class="timeline-value">${escapeHtml(item.completed_content || '')}</div></div>
@@ -169,6 +200,67 @@ function renderProgressTimeline(items) {
       </div>
     </div>`;
   }).join('');
+}
+
+function openProgressModal(item) {
+  progressModalError.style.display = 'none';
+  editingProgressId = item ? item.id : null;
+  progressModalTitle.textContent = item ? '编辑进展' : '填报进展';
+  pfReportDate.value = item ? formatDate(item.report_date) : new Date().toISOString().slice(0, 10);
+  pfCompleted.value = item ? (item.completed_content || '') : '';
+  pfNextPlan.value = item ? (item.next_plan || '') : '';
+  pfRisk.value = item ? (item.risk_note || '') : '';
+  const tags = item ? (item.tags || '').split(',').map(s => s.trim()) : [];
+  for (const cb of tagCheckboxes) cb.checked = tags.includes(cb.value);
+  pfReporter.value = item ? (item.reporter || '') : (localStorage.getItem('progress_reporter') || '');
+  progressModal.style.display = 'flex';
+}
+
+function closeProgressModal() {
+  progressModal.style.display = 'none';
+}
+
+async function submitProgressForm(e) {
+  e.preventDefault();
+  progressModalError.style.display = 'none';
+  const payload = {
+    report_date: pfReportDate.value,
+    completed_content: pfCompleted.value,
+    next_plan: pfNextPlan.value,
+    risk_note: pfRisk.value,
+    tags: tagCheckboxes.filter(cb => cb.checked).map(cb => cb.value).join(','),
+    reporter: pfReporter.value,
+  };
+  try {
+    const isEdit = editingProgressId !== null;
+    const url = isEdit
+      ? `${API_BASE}/api/progress/${editingProgressId}`
+      : `${API_BASE}/api/projects/${projectId}/progress`;
+    const resp = await fetch(url, {
+      method: isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.message || result.error || `HTTP ${resp.status}`);
+    if (payload.reporter) localStorage.setItem('progress_reporter', payload.reporter);
+    closeProgressModal();
+    await loadProgress();
+  } catch (err) {
+    progressModalError.textContent = '保存失败：' + err.message;
+    progressModalError.style.display = 'block';
+  }
+}
+
+async function deleteProgress(id) {
+  if (!confirm('确定删除这条进展记录吗？')) return;
+  try {
+    const resp = await fetch(`${API_BASE}/api/progress/${id}`, { method: 'DELETE' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    await loadProgress();
+  } catch (err) {
+    alert('删除失败：' + err.message);
+  }
 }
 
 function statusClass(status) {
