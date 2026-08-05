@@ -51,3 +51,41 @@ test('project_progress 表已创建，字段与索引齐全', async () => {
   assert.ok(idxNames.has('idx_progress_project_id'), '缺少索引 idx_progress_project_id');
   assert.ok(idxNames.has('idx_progress_report_date'), '缺少索引 idx_progress_report_date');
 });
+
+test('issues 与 issue_comments 表已创建，字段与索引齐全', async () => {
+  const issueCols = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = 'issues'`
+  );
+  const issueNames = new Set(issueCols.map((c) => c.COLUMN_NAME));
+  for (const f of ['id', 'issue_no', 'project_id', 'title', 'description', 'severity',
+    'assignee', 'helper', 'status', 'found_date', 'due_date', 'resolved_at', 'solution',
+    'created_by', 'created_at', 'updated_at']) {
+    assert.ok(issueNames.has(f), `issues 缺少字段 ${f}`);
+  }
+
+  const issueIdx = await db.query(
+    `SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = 'issues'`
+  );
+  const issueIdxNames = new Set(issueIdx.map((i) => i.INDEX_NAME));
+  assert.ok(issueIdxNames.has('uk_issue_no'), '缺少唯一索引 uk_issue_no');
+  assert.ok(issueIdxNames.has('idx_issue_project_id'), '缺少索引 idx_issue_project_id');
+  assert.ok(issueIdxNames.has('idx_issue_status'), '缺少索引 idx_issue_status');
+
+  const commentCols = await db.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = 'issue_comments'`
+  );
+  const commentNames = new Set(commentCols.map((c) => c.COLUMN_NAME));
+  for (const f of ['id', 'issue_id', 'content', 'author', 'created_at']) {
+    assert.ok(commentNames.has(f), `issue_comments 缺少字段 ${f}`);
+  }
+
+  const commentIdx = await db.query(
+    `SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = 'project_tracker_test' AND TABLE_NAME = 'issue_comments'`
+  );
+  const commentIdxNames = new Set(commentIdx.map((i) => i.INDEX_NAME));
+  assert.ok(commentIdxNames.has('idx_comment_issue_id'), '缺少索引 idx_comment_issue_id');
+});

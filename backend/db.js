@@ -147,6 +147,35 @@ const progressColumns = [
   '`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT \'更新时间\'',
 ];
 
+// 问题单表字段定义（project_id 关联 projects.id；枚举语义 VARCHAR + API 校验）
+const issueColumns = [
+  '`id` INT NOT NULL AUTO_INCREMENT COMMENT \'序号\'',
+  '`issue_no` VARCHAR(50) NOT NULL COMMENT \'问题编号（ISS-0001，服务端生成）\'',
+  '`project_id` INT NOT NULL COMMENT \'所属项目 ID\'',
+  '`title` VARCHAR(500) NOT NULL COMMENT \'问题标题\'',
+  '`description` TEXT COMMENT \'问题描述\'',
+  '`severity` VARCHAR(20) NOT NULL DEFAULT \'一般\' COMMENT \'严重程度（一般/重要/紧急）\'',
+  '`assignee` VARCHAR(100) DEFAULT NULL COMMENT \'责任人\'',
+  '`helper` VARCHAR(100) DEFAULT NULL COMMENT \'协助人\'',
+  '`status` VARCHAR(20) NOT NULL DEFAULT \'新建\' COMMENT \'状态（新建/处理中/待确认/已解决/已关闭）\'',
+  '`found_date` DATE DEFAULT NULL COMMENT \'发现日期\'',
+  '`due_date` DATE DEFAULT NULL COMMENT \'期望解决日期\'',
+  '`resolved_at` DATE DEFAULT NULL COMMENT \'实际解决日期\'',
+  '`solution` TEXT COMMENT \'解决方案\'',
+  '`created_by` VARCHAR(100) DEFAULT NULL COMMENT \'创建人\'',
+  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
+  '`updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT \'更新时间\'',
+];
+
+// 问题评论表字段定义（issue_id 关联 issues.id）
+const issueCommentColumns = [
+  '`id` INT NOT NULL AUTO_INCREMENT COMMENT \'序号\'',
+  '`issue_id` INT NOT NULL COMMENT \'问题 ID\'',
+  '`content` TEXT NOT NULL COMMENT \'评论内容\'',
+  '`author` VARCHAR(100) DEFAULT NULL COMMENT \'评论人\'',
+  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
+];
+
 function parseColumnName(colDef) {
   const m = colDef.match(/^`([^`]+)`/);
   return m ? m[1] : '';
@@ -303,6 +332,62 @@ async function initDatabase() {
     await db.query(`ALTER TABLE \`project_progress\` MODIFY COLUMN ${colDef}`);
   }
 
+  // 创建问题单表
+  const createIssuesSql = `
+    CREATE TABLE IF NOT EXISTS \`issues\` (
+      ${issueColumns.join(',\n      ')},
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`uk_issue_no\` (\`issue_no\`),
+      KEY \`idx_issue_project_id\` (\`project_id\`),
+      KEY \`idx_issue_status\` (\`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createIssuesSql);
+
+  // 为已存在的问题表补充缺失字段
+  const [existingIssueCols] = await db.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [dbName, 'issues']
+  );
+  const existingIssueSet = new Set(existingIssueCols.map(c => c.COLUMN_NAME));
+  for (const colDef of issueColumns) {
+    const colName = parseColumnName(colDef);
+    if (!existingIssueSet.has(colName)) {
+      await db.query(`ALTER TABLE \`issues\` ADD COLUMN ${colDef}`);
+      console.log('新增问题表字段:', colName);
+    }
+  }
+  for (const colDef of issueColumns) {
+    await db.query(`ALTER TABLE \`issues\` MODIFY COLUMN ${colDef}`);
+  }
+
+  // 创建问题评论表
+  const createIssueCommentsSql = `
+    CREATE TABLE IF NOT EXISTS \`issue_comments\` (
+      ${issueCommentColumns.join(',\n      ')},
+      PRIMARY KEY (\`id\`),
+      KEY \`idx_comment_issue_id\` (\`issue_id\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createIssueCommentsSql);
+
+  // 为已存在的评论表补充缺失字段
+  const [existingCommentCols] = await db.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [dbName, 'issue_comments']
+  );
+  const existingCommentSet = new Set(existingCommentCols.map(c => c.COLUMN_NAME));
+  for (const colDef of issueCommentColumns) {
+    const colName = parseColumnName(colDef);
+    if (!existingCommentSet.has(colName)) {
+      await db.query(`ALTER TABLE \`issue_comments\` ADD COLUMN ${colDef}`);
+      console.log('新增评论表字段:', colName);
+    }
+  }
+  for (const colDef of issueCommentColumns) {
+    await db.query(`ALTER TABLE \`issue_comments\` MODIFY COLUMN ${colDef}`);
+  }
+
   console.log('数据库与表初始化完成:', dbName);
 }
 
@@ -315,6 +400,8 @@ module.exports = {
   watchProjectColumns,
   watchProgressColumns,
   progressColumns,
+  issueColumns,
+  issueCommentColumns,
   setDbConfig,
   getDbConfig,
 };
