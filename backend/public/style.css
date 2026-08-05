@@ -1018,3 +1018,8 @@ th.sortable:hover {
 .badge-health-ok { background: rgba(46, 125, 50, 0.12); color: #2e7d32; }
 .badge-health-warn { background: rgba(245, 166, 35, 0.15); color: #b26a00; }
 .badge-health-danger { background: rgba(234, 34, 97, 0.12); color: var(--ruby); }
+
+/* 进展标签 */
+.badge-tag-milestone { background: rgba(46, 125, 50, 0.12); color: #2e7d32; }
+.badge-tag-risk { background: rgba(234, 34, 97, 0.12); color: var(--ruby); }
+.badge-tag-decision { background: rgba(245, 166, 35, 0.15); color: #b26a00; }

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>项目详情</title>
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
   <style>
     .detail-section { margin-bottom: var(--space-lg); }
     .detail-section h2 {
@@ -29,6 +29,73 @@
       padding: var(--space-lg);
       border-top: 1px solid var(--hairline);
     }
+    /* 进展跟踪分区 */
+    .progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--space-sm);
+      padding: var(--space-md) var(--space-lg) 0;
+    }
+    .progress-header h2 {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--ink);
+      margin: 0 0 var(--space-sm);
+    }
+    .progress-controls {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: 13px;
+      color: var(--ink-secondary);
+    }
+    .progress-controls input[type="date"] {
+      font-family: inherit;
+      font-size: 13px;
+      padding: 4px 8px;
+      border: 1px solid var(--hairline-input);
+      border-radius: var(--rounded-sm);
+      background: var(--canvas);
+      color: var(--ink);
+    }
+    .progress-timeline { padding: 0 var(--space-lg) var(--space-lg); }
+    .timeline-item {
+      border-left: 2px solid var(--primary);
+      padding: 0 0 var(--space-md) var(--space-md);
+      margin-left: 6px;
+      position: relative;
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--primary);
+    }
+    .timeline-head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+      margin-bottom: var(--space-xs);
+    }
+    .timeline-date { font-weight: 500; color: var(--ink); }
+    .timeline-reporter { font-size: 13px; color: var(--ink-mute); }
+    .timeline-label { font-size: 12px; color: var(--ink-mute); }
+    .timeline-value {
+      font-size: 14px;
+      color: var(--ink);
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-bottom: var(--space-xs);
+    }
+    .timeline-risk { color: var(--ruby); }
+    .progress-empty { color: var(--ink-mute); font-size: 14px; padding: var(--space-md) 0; }
   </style>
 </head>
 <body>
@@ -51,6 +118,23 @@
 
     <div id="detailCard" class="card" style="display: none;">
       <div id="detailBody"></div>
+
+      <section id="progressSection" class="detail-section">
+        <div class="progress-header">
+          <h2>进展跟踪</h2>
+          <div class="progress-controls">
+            <input type="date" id="progressFrom" title="起始日期">
+            <span>至</span>
+            <input type="date" id="progressTo" title="结束日期">
+            <button id="progressFilterBtn" class="btn-secondary">筛选</button>
+            <button id="progressClearBtn" class="btn-secondary">清除</button>
+          </div>
+        </div>
+        <div id="progressError" class="error" style="display: none;"></div>
+        <div id="progressTimeline" class="progress-timeline"></div>
+      </section>
+
+      <div id="detailBodyAfter"></div>
       <div class="detail-actions">
         <a id="editLink" href="#" class="btn-primary">编辑</a>
         <a href="index.html" class="btn-secondary">返回列表</a>

@@ -10,6 +10,15 @@ const detailBody = document.getElementById('detailBody');
 const pageTitle = document.getElementById('pageTitle');
 const pageSubtitle = document.getElementById('pageSubtitle');
 const editLink = document.getElementById('editLink');
+const detailBodyAfter = document.getElementById('detailBodyAfter');
+const progressFrom = document.getElementById('progressFrom');
+const progressTo = document.getElementById('progressTo');
+const progressFilterBtn = document.getElementById('progressFilterBtn');
+const progressClearBtn = document.getElementById('progressClearBtn');
+const progressError = document.getElementById('progressError');
+const progressTimeline = document.getElementById('progressTimeline');
+
+let progressItems = [];
 
 // 分区字段（字段名与 projects 表一致；跟踪信息置顶，后续阶段在此页追加进展/问题分区）
 const SECTIONS = [
@@ -50,6 +59,13 @@ async function init() {
   try {
     await Promise.all([loadColumns(), loadData()]);
     renderDetail();
+    progressFilterBtn.addEventListener('click', () => loadProgress());
+    progressClearBtn.addEventListener('click', () => {
+      progressFrom.value = '';
+      progressTo.value = '';
+      loadProgress();
+    });
+    loadProgress();
     hideLoading();
     detailCard.style.display = 'block';
   } catch (err) {
@@ -82,13 +98,16 @@ function renderDetail() {
   pageSubtitle.textContent = project.project_code ? `项目编码：${project.project_code}` : '';
   editLink.href = `edit.html?id=${projectId}`;
 
-  detailBody.innerHTML = SECTIONS.map(section => {
+  const renderSections = (sections) => sections.map(section => {
     const items = section.fields.map(field => {
       const label = escapeHtml(columnComments[field] || field);
       return `<div class="detail-item"><span class="label">${label}</span><span class="value">${renderValue(field)}</span></div>`;
     }).join('');
     return `<section class="detail-section"><h2>${section.title}</h2><div class="detail-grid">${items}</div></section>`;
   }).join('');
+  // 跟踪信息在前，进展分区居中（detail.html 静态 markup），其余分区在后
+  detailBody.innerHTML = renderSections([SECTIONS[0]]);
+  detailBodyAfter.innerHTML = renderSections(SECTIONS.slice(1));
 }
 
 function renderValue(field) {
@@ -103,6 +122,53 @@ function renderValue(field) {
   if (field.endsWith('_date')) return formatDate(val);
   if (field.endsWith('_amount')) return formatNumber(val);
   return escapeHtml(val);
+}
+
+async function loadProgress() {
+  progressError.style.display = 'none';
+  try {
+    const params = new URLSearchParams();
+    if (progressFrom.value) params.append('from', progressFrom.value);
+    if (progressTo.value) params.append('to', progressTo.value);
+    const qs = params.toString();
+    const resp = await fetch(`${API_BASE}/api/projects/${projectId}/progress${qs ? '?' + qs : ''}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.error || '加载进展失败');
+    progressItems = result.data || [];
+    renderProgressTimeline(progressItems);
+  } catch (err) {
+    progressTimeline.innerHTML = '';
+    progressError.textContent = '进展加载失败：' + err.message;
+    progressError.style.display = 'block';
+  }
+}
+
+function progressTagClass(tag) {
+  return { '里程碑达成': 'milestone', '风险上升': 'risk', '需领导决策': 'decision' }[tag] || 'milestone';
+}
+
+function renderProgressTimeline(items) {
+  if (items.length === 0) {
+    progressTimeline.innerHTML = '<div class="progress-empty">暂无进展记录</div>';
+    return;
+  }
+  progressTimeline.innerHTML = items.map(item => {
+    const tags = (item.tags || '').split(',').map(s => s.trim()).filter(Boolean);
+    const tagsHtml = tags.map(t => `<span class="badge badge-tag-${progressTagClass(t)}">${escapeHtml(t)}</span>`).join(' ');
+    return `<div class="timeline-item">
+      <div class="timeline-head">
+        <span class="timeline-date">${formatDate(item.report_date)}</span>
+        ${item.reporter ? `<span class="timeline-reporter">${escapeHtml(item.reporter)}</span>` : ''}
+        ${tagsHtml}
+      </div>
+      <div class="timeline-body">
+        <div class="timeline-field"><span class="timeline-label">完成内容</span><div class="timeline-value">${escapeHtml(item.completed_content || '')}</div></div>
+        ${item.next_plan ? `<div class="timeline-field"><span class="timeline-label">下阶段计划</span><div class="timeline-value">${escapeHtml(item.next_plan)}</div></div>` : ''}
+        ${item.risk_note ? `<div class="timeline-field"><span class="timeline-label">风险说明</span><div class="timeline-value timeline-risk">${escapeHtml(item.risk_note)}</div></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function statusClass(status) {
