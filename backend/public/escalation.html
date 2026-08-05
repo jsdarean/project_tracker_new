@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>催办管理</title>
+  <link rel="stylesheet" href="style.css?v=29">
+  <style>
+    .esc-section { margin-bottom: var(--space-md); }
+    .esc-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: var(--space-md) var(--space-lg);
+    }
+    .esc-header h2 { font-size: 16px; font-weight: 500; color: var(--ink); margin: 0; }
+    .esc-table { width: 100%; border-collapse: collapse; }
+    .esc-table th, .esc-table td {
+      text-align: left; font-size: 13px; padding: var(--space-xs) var(--space-md);
+      border-bottom: 1px solid var(--hairline); color: var(--ink);
+    }
+    .esc-table th { color: var(--ink-secondary); font-weight: 500; }
+    .esc-table td .muted { color: var(--ink-mute); }
+    .esc-body { padding-bottom: var(--space-md); }
+    .log-status { font-weight: 500; }
+    .log-sent { color: #2e7d32; }
+    .log-failed { color: var(--ruby); }
+    .log-bounced { color: #b26a00; }
+    .log-skipped { color: var(--ink-mute); }
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal-card {
+      background: var(--canvas); border-radius: var(--rounded-sm);
+      padding: var(--space-lg); width: 520px; max-width: 92vw;
+      max-height: 88vh; overflow-y: auto;
+    }
+    .modal-card h3 { margin: 0 0 var(--space-md); font-size: 16px; }
+    .modal-field { display: flex; flex-direction: column; gap: var(--space-xs); margin-bottom: var(--space-md); }
+    .modal-field label { font-size: 13px; color: var(--ink-secondary); }
+    .modal-field input, .modal-field select, .modal-field textarea {
+      font-family: inherit; font-size: 14px; padding: var(--space-sm) var(--space-md);
+      border: 1px solid var(--hairline-input); border-radius: var(--rounded-sm);
+      background: var(--canvas); color: var(--ink); outline: none;
+    }
+    .modal-roles { display: flex; gap: var(--space-lg); font-size: 14px; }
+    .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; }
+    .tpl-edit textarea { width: 100%; min-height: 80px; font-family: inherit; font-size: 13px; }
+    .tpl-edit input { width: 100%; font-family: inherit; font-size: 13px; padding: 4px 8px; }
+    .log-filters { display: flex; gap: var(--space-sm); align-items: center; padding: 0 var(--space-lg) var(--space-sm); }
+    .log-filters select, .log-filters input {
+      font-size: 13px; padding: 4px 8px; border: 1px solid var(--hairline-input);
+      border-radius: var(--rounded-sm); background: var(--canvas); color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <div class="hero-mesh" aria-hidden="true"></div>
+    <div class="container hero-content">
+      <header class="page-header">
+        <div class="page-title"><h1>催办管理</h1></div>
+        <a href="index.html" class="btn-secondary settings-btn">返回首页</a>
+        <a href="issues.html" class="btn-secondary settings-btn">问题跟踪</a>
+      </header>
+    </div>
+  </div>
+
+  <main class="container">
+    <div class="card esc-section">
+      <div class="esc-header">
+        <h2>催办规则</h2>
+        <button id="ruleAddBtn" class="btn-primary">新建规则</button>
+      </div>
+      <div class="esc-body">
+        <table class="esc-table">
+          <thead><tr><th>名称</th><th>严重度</th><th>触发条件</th><th>收件人</th><th>抄送</th><th>模板</th><th>间隔(h)</th><th>启用</th><th>操作</th></tr></thead>
+          <tbody id="rulesBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card esc-section">
+      <div class="esc-header"><h2>邮件模板</h2></div>
+      <div class="esc-body" id="templatesBody"></div>
+    </div>
+
+    <div class="card esc-section">
+      <div class="esc-header"><h2>发送日志</h2></div>
+      <div class="log-filters">
+        <select id="logStatusFilter">
+          <option value="">全部状态</option>
+          <option value="sent">sent</option>
+          <option value="failed">failed</option>
+          <option value="bounced">bounced</option>
+          <option value="skipped">skipped</option>
+        </select>
+        <button id="logRefreshBtn" class="btn-secondary">刷新</button>
+      </div>
+      <div class="esc-body">
+        <table class="esc-table">
+          <thead><tr><th>时间</th><th>问题</th><th>收件人</th><th>主题</th><th>状态</th><th>失败原因</th></tr></thead>
+          <tbody id="logsBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <button id="logPrevBtn" class="btn-secondary">上一页</button>
+        <span id="logPageInfo">第 1 页</span>
+        <button id="logNextBtn" class="btn-secondary">下一页</button>
+      </div>
+    </div>
+
+    <div id="ruleModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <h3 id="ruleModalTitle">新建规则</h3>
+        <div class="modal-field"><label>规则名称 *</label><input type="text" id="rName"></div>
+        <div class="modal-field">
+          <label>适用严重程度</label>
+          <select id="rSeverity">
+            <option value="">全部</option><option value="一般">一般</option><option value="重要">重要</option><option value="紧急">紧急</option>
+          </select>
+        </div>
+        <div class="modal-field">
+          <label>触发条件</label>
+          <div style="display: flex; gap: var(--space-md); align-items: center;">
+            <select id="rTriggerType">
+              <option value="after">逾期</option><option value="before">临期</option>
+            </select>
+            <input type="number" id="rDays" min="0" style="width: 80px;"> 天
+          </div>
+        </div>
+        <div class="modal-field">
+          <label>收件人角色 *</label>
+          <div class="modal-roles">
+            <label><input type="checkbox" class="rToRole" value="assignee"> 责任人</label>
+            <label><input type="checkbox" class="rToRole" value="manager"> 项目经理</label>
+            <label><input type="checkbox" class="rToRole" value="leader"> 部门领导</label>
+          </div>
+        </div>
+        <div class="modal-field">
+          <label>抄送角色</label>
+          <div class="modal-roles">
+            <label><input type="checkbox" class="rCcRole" value="assignee"> 责任人</label>
+            <label><input type="checkbox" class="rCcRole" value="manager"> 项目经理</label>
+            <label><input type="checkbox" class="rCcRole" value="leader"> 部门领导</label>
+          </div>
+        </div>
+        <div class="modal-field"><label>邮件模板</label><select id="rTemplate"></select></div>
+        <div class="modal-field"><label>最小发送间隔（小时）</label><input type="number" id="rInterval" min="1" value="24"></div>
+        <div class="modal-actions">
+          <button id="ruleSaveBtn" class="btn-primary">保存</button>
+          <button id="ruleCancelBtn" class="btn-secondary">取消</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="escalation.js"></script>
+</body>
+</html>
