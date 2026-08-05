@@ -10,7 +10,7 @@ let exportFields = [];
 // 当前排序（字段白名单与后端一致）
 let currentSort = '';
 let currentOrder = 'asc';
-const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'planned_start_date', 'planned_end_date']);
+const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'planned_start_date', 'planned_end_date', 'last_progress_date']);
 
 // 列表默认展示的字段（顺序），_select / _action 为非数据库字段
 const displayColumns = [
@@ -24,6 +24,7 @@ const displayColumns = [
   'planned_end_date',
   'project_status',
   'health_status',
+  'last_progress_date',
   'approval_amount',
   'project_set',
   'project_subset',
@@ -65,6 +66,9 @@ const editBtn = document.getElementById('editBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const pageInfo = document.getElementById('pageInfo');
+const overviewToggle = document.getElementById('overviewToggle');
+const overviewRecent = document.getElementById('overviewRecent');
+const overviewStale = document.getElementById('overviewStale');
 let selectAllCheckbox = null;
 
 async function init() {
@@ -72,6 +76,7 @@ async function init() {
   await loadExportSettings();
   refreshHeader();
   await loadData();
+  loadOverview();
 }
 
 async function loadExportSettings() {
@@ -98,6 +103,7 @@ async function loadColumns() {
     for (const col of result.data) {
       columnComments[col.field] = col.comment || col.field;
     }
+    columnComments['last_progress_date'] = '最新进展日期';
   } catch (err) {
     console.error('加载字段注释失败:', err);
     // 失败时使用字段名兜底
@@ -252,6 +258,11 @@ function renderCell(field, row) {
       return `<td>${row.project_status ? `<span class="badge badge-status-${statusClass(row.project_status)}">${escapeHtml(row.project_status)}</span>` : ''}</td>`;
     case 'health_status':
       return `<td>${row.health_status ? `<span class="badge badge-health-${healthClass(row.health_status)}">${escapeHtml(row.health_status)}</span>` : ''}</td>`;
+    case 'last_progress_date': {
+      if (!row.last_progress_date) return '<td>—</td>';
+      const days = Math.floor((Date.now() - new Date(row.last_progress_date).getTime()) / 86400000);
+      return `<td${days > 14 ? ' class="stale-date"' : ''}>${formatDate(row.last_progress_date)}</td>`;
+    }
     case 'approval_amount':
       return `<td class="amount">${formatNumber(row.approval_amount)}</td>`;
     case 'project_set':
@@ -381,6 +392,53 @@ function updatePagination() {
   nextBtn.disabled = currentPage >= totalPages;
 }
 
+async function loadOverview() {
+  try {
+    const resp = await fetch(`${API_BASE}/api/progress/overview`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.error || '加载失败');
+    renderOverviewRecent(result.data.recent || []);
+    renderOverviewStale(result.data.stale || []);
+  } catch (err) {
+    overviewRecent.innerHTML = '<div class="overview-empty">进展概览加载失败</div>';
+    overviewStale.innerHTML = '';
+  }
+}
+
+function progressTagClass(tag) {
+  return { '里程碑达成': 'milestone', '风险上升': 'risk', '需领导决策': 'decision' }[tag] || 'milestone';
+}
+
+function renderOverviewRecent(items) {
+  if (items.length === 0) {
+    overviewRecent.innerHTML = '<div class="overview-empty">暂无进展记录</div>';
+    return;
+  }
+  overviewRecent.innerHTML = items.map(item => {
+    const tags = (item.tags || '').split(',').map(s => s.trim()).filter(Boolean);
+    const tagsHtml = tags.map(t => `<span class="badge badge-tag-${progressTagClass(t)}">${escapeHtml(t)}</span>`).join(' ');
+    return `<div class="overview-item">
+      <a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 20))}</a>
+      <span class="overview-meta">${formatDate(item.report_date)}${item.reporter ? ' · ' + escapeHtml(item.reporter) : ''}</span>
+      <div class="overview-summary">${escapeHtml(truncate(item.completed_content, 40))} ${tagsHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderOverviewStale(items) {
+  if (items.length === 0) {
+    overviewStale.innerHTML = '<div class="overview-empty">没有滞后的项目</div>';
+    return;
+  }
+  overviewStale.innerHTML = items.map(item => {
+    const label = item.last_progress_date
+      ? `<span class="stale-text">${item.days_stale} 天未更新</span>`
+      : '<span class="never-text">从未填报</span>';
+    return `<div class="overview-item"><a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 24))}</a> ${label}</div>`;
+  }).join('');
+}
+
 function showLoading(show) {
   loadingEl.style.display = show ? 'block' : 'none';
 }
@@ -432,6 +490,14 @@ function formatNumber(num) {
 refreshBtn.addEventListener('click', () => {
   currentPage = 1;
   loadData();
+});
+
+overviewToggle.addEventListener('click', () => {
+  const body = document.getElementById('overviewBody');
+  const arrow = document.getElementById('overviewArrow');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  arrow.textContent = hidden ? '▼' : '▶';
 });
 
 tableBody.addEventListener('click', async (e) => {

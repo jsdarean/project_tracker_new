@@ -1023,3 +1023,43 @@ th.sortable:hover {
 .badge-tag-milestone { background: rgba(46, 125, 50, 0.12); color: #2e7d32; }
 .badge-tag-risk { background: rgba(234, 34, 97, 0.12); color: var(--ruby); }
 .badge-tag-decision { background: rgba(245, 166, 35, 0.15); color: #b26a00; }
+
+
+/* 进展概览卡片 */
+.overview-card { margin-bottom: var(--space-md); }
+.overview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--ink);
+  user-select: none;
+}
+.overview-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+  padding: 0 var(--space-lg) var(--space-lg);
+}
+.overview-col h3 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-secondary);
+  margin: 0 0 var(--space-sm);
+}
+.overview-item {
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 13px;
+}
+.overview-item:last-child { border-bottom: none; }
+.overview-meta { color: var(--ink-mute); font-size: 12px; margin-left: var(--space-sm); }
+.overview-summary { color: var(--ink-secondary); margin-top: 2px; }
+.overview-empty { color: var(--ink-mute); font-size: 13px; }
+
+/* 进展滞后标识 */
+.stale-text { color: var(--ruby); font-size: 12px; }
+.never-text { color: var(--ink-mute); font-size: 12px; }
+.stale-date { color: var(--ruby); font-weight: 500; }

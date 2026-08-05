@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>项目信息查询</title>
-  <link rel="stylesheet" href="style.css?v=26">
+  <link rel="stylesheet" href="style.css?v=27">
 </head>
 <body>
   <div class="hero">
@@ -59,6 +59,23 @@
       <button id="exportBtn" class="btn-secondary">导出 Excel</button>
     </div>
 
+    <div id="overviewCard" class="card overview-card">
+      <div class="overview-header" id="overviewToggle">
+        <span>进展概览</span>
+        <span id="overviewArrow">▼</span>
+      </div>
+      <div id="overviewBody" class="overview-body">
+        <div class="overview-col">
+          <h3>最近更新</h3>
+          <div id="overviewRecent" class="overview-list">加载中...</div>
+        </div>
+        <div class="overview-col">
+          <h3>进展滞后 / 未填报</h3>
+          <div id="overviewStale" class="overview-list">加载中...</div>
+        </div>
+      </div>
+    </div>
+
     <div id="loading" class="loading card">加载中...</div>
     <div id="error" class="error card" style="display: none;"></div>
 
@@ -80,6 +97,6 @@
     </div>
   </main>
 
-  <script src="app.js?v=28"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>
