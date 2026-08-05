@@ -36,6 +36,10 @@ const PROJECT_STATUS_VALUES = ['未启动', '进行中', '已暂停', '已结项
 const HEALTH_STATUS_VALUES = ['正常', '关注', '风险'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// 进展标签合法取值与进展滞后阈值（天）
+const PROGRESS_TAG_VALUES = ['里程碑达成', '风险上升', '需领导决策'];
+const STALE_DAYS = 14;
+
 // 校验跟踪字段：未传/null/空字符串跳过；非法值返回错误消息，合法返回 null
 function validateTrackingFields(data) {
   if (data.project_status && !PROJECT_STATUS_VALUES.includes(data.project_status)) {
@@ -612,6 +616,127 @@ app.delete('/api/projects/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: '删除失败', message: err.message });
+  }
+});
+
+/* ---------- 进展跟踪接口 ---------- */
+
+// 校验进展数据：isPartial=true（PUT）时未传字段跳过；否则（POST）report_date/completed_content 必填
+function validateProgressPayload(data, isPartial) {
+  if (!isPartial || data.report_date !== undefined) {
+    if (!data.report_date || !DATE_RE.test(data.report_date)) {
+      return 'report_date 必填且必须是 YYYY-MM-DD 格式';
+    }
+  }
+  if (!isPartial || data.completed_content !== undefined) {
+    if (!data.completed_content || !String(data.completed_content).trim()) {
+      return 'completed_content 必填且不能为空';
+    }
+  }
+  if (data.tags) {
+    const tags = String(data.tags).split(',').map((s) => s.trim()).filter(Boolean);
+    const invalid = tags.filter((t) => !PROGRESS_TAG_VALUES.includes(t));
+    if (invalid.length > 0) {
+      return `tags 含非法值：${invalid.join('、')}，可选值为：${PROGRESS_TAG_VALUES.join(' / ')}`;
+    }
+  }
+  return null;
+}
+
+// 查询某项目进展列表（支持 from/to 按填报日期过滤）
+app.get('/api/projects/:id/progress', async (req, res) => {
+  try {
+    const projectRows = await query('SELECT id FROM projects WHERE id = ?', [req.params.id]);
+    if (projectRows.length === 0) return res.status(404).json({ error: '项目不存在' });
+
+    let sql = 'SELECT * FROM project_progress WHERE project_id = ?';
+    const params = [req.params.id];
+    const { from, to } = req.query;
+    if (from && DATE_RE.test(from)) {
+      sql += ' AND report_date >= ?';
+      params.push(from);
+    }
+    if (to && DATE_RE.test(to)) {
+      sql += ' AND report_date <= ?';
+      params.push(to);
+    }
+    sql += ' ORDER BY report_date DESC, id DESC';
+
+    const rows = await query(sql, params);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('查询进展失败:', err);
+    res.status(500).json({ error: '查询进展失败', message: err.message });
+  }
+});
+
+// 新增进展（attachments 为后续阶段预留，本期恒为 NULL，不接受传入）
+app.post('/api/projects/:id/progress', async (req, res) => {
+  try {
+    const projectRows = await query('SELECT id FROM projects WHERE id = ?', [req.params.id]);
+    if (projectRows.length === 0) return res.status(404).json({ error: '项目不存在' });
+
+    const data = req.body;
+    const invalid = validateProgressPayload(data, false);
+    if (invalid) return res.status(400).json({ error: '参数校验失败', message: invalid });
+
+    const result = await query(
+      `INSERT INTO project_progress (project_id, report_date, completed_content, next_plan, risk_note, tags, reporter)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        req.params.id,
+        data.report_date,
+        String(data.completed_content).trim(),
+        data.next_plan || null,
+        data.risk_note || null,
+        data.tags ? String(data.tags) : null,
+        data.reporter || null,
+      ]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) {
+    console.error('新增进展失败:', err);
+    res.status(500).json({ error: '新增进展失败', message: err.message });
+  }
+});
+
+// 修改进展
+app.put('/api/progress/:id', async (req, res) => {
+  try {
+    const data = req.body;
+    const invalid = validateProgressPayload(data, true);
+    if (invalid) return res.status(400).json({ error: '参数校验失败', message: invalid });
+
+    const fields = ['report_date', 'completed_content', 'next_plan', 'risk_note', 'tags', 'reporter'];
+    const updates = [];
+    const values = [];
+    for (const f of fields) {
+      if (data[f] !== undefined) {
+        updates.push(`\`${f}\` = ?`);
+        values.push(data[f] === '' ? null : data[f]);
+      }
+    }
+    if (updates.length === 0) return res.status(400).json({ error: '没有可更新字段' });
+    values.push(req.params.id);
+
+    const result = await query(`UPDATE project_progress SET ${updates.join(',')} WHERE id = ?`, values);
+    if (result.affectedRows === 0) return res.status(404).json({ error: '进展记录不存在' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('更新进展失败:', err);
+    res.status(500).json({ error: '更新进展失败', message: err.message });
+  }
+});
+
+// 删除进展
+app.delete('/api/progress/:id', async (req, res) => {
+  try {
+    const result = await query('DELETE FROM project_progress WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: '进展记录不存在' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('删除进展失败:', err);
+    res.status(500).json({ error: '删除进展失败', message: err.message });
   }
 });
 
