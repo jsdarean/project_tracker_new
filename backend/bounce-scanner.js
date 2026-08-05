@@ -73,7 +73,7 @@ async function scanBounces(settings, deps = {}) {
       const uidValidity = String(client.mailbox.uidValidity);
       let uids;
       if (settings.imap_last_uid && settings.imap_uidvalidity === uidValidity) {
-        uids = await client.search({ uid: `${settings.imap_last_uid + 1}:*` }, { uid: true });
+        uids = await client.search({ uid: `${Number(settings.imap_last_uid) + 1}:*` }, { uid: true });
       } else {
         // 首次或 UIDVALIDITY 失效：只扫最近 3 天
         uids = await client.search({ since: new Date(Date.now() - 3 * 86400000) }, { uid: true });
