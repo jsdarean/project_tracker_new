@@ -8,6 +8,7 @@ const xlsx = require('xlsx');
 const { exec, spawn } = require('child_process');
 const { query, initDatabase, projectColumns, contactColumns, setDbConfig, getDbConfig } = require('./db');
 const { extract } = require('./extractor');
+const issuesRouter = require('./routes/issues');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1203,6 +1204,9 @@ app.get('/api/company-contacts/personnel', async (req, res) => {
     res.status(500).json({ error: '查询通讯录人员失败', message: err.message });
   }
 });
+
+// 问题跟踪模块（独立 Router，第三阶段起新模块不再内联）
+app.use(issuesRouter);
 
 async function start() {
   // 加载本地设置并应用数据库配置（覆盖环境变量默认值）
