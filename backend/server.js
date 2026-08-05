@@ -9,6 +9,8 @@ const { exec, spawn } = require('child_process');
 const { query, initDatabase, projectColumns, contactColumns, setDbConfig, getDbConfig } = require('./db');
 const { extract } = require('./extractor');
 const issuesRouter = require('./routes/issues');
+const escalationRouter = require('./routes/escalation');
+const { startCron } = require('./escalation');
 const { loadSettings, saveSettings, EMAIL_DEFAULTS } = require('./settings-store');
 
 const app = express();
@@ -1181,6 +1183,7 @@ app.get('/api/company-contacts/personnel', async (req, res) => {
 
 // 问题跟踪模块（独立 Router，第三阶段起新模块不再内联）
 app.use(issuesRouter);
+app.use(escalationRouter);
 
 async function start() {
   // 加载本地设置并应用数据库配置（覆盖环境变量默认值）
@@ -1200,6 +1203,9 @@ async function start() {
   }
 
   await initDatabase();
+  // 邮件催办定时任务（cron 表达式非法时仅禁用对应任务，不影响启动）
+  const cronSettings = await loadSettings();
+  startCron(cronSettings);
   app.listen(PORT, () => {
     console.log(`项目信息提取后端已启动: http://localhost:${PORT}`);
   });
