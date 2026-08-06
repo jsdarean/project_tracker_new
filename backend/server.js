@@ -6,7 +6,7 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const xlsx = require('xlsx');
 const { exec, spawn } = require('child_process');
-const { query, initDatabase, projectColumns, contactColumns, setDbConfig, getDbConfig } = require('./db');
+const { query, getPool, initDatabase, projectColumns, contactColumns, setDbConfig, getDbConfig } = require('./db');
 const { extract } = require('./extractor');
 const issuesRouter = require('./routes/issues');
 const escalationRouter = require('./routes/escalation');
@@ -759,20 +759,70 @@ app.get('/api/progress/overview', async (req, res) => {
 
 /* ---------- 联系人接口 ---------- */
 
-// 获取地市/公司可选值（用于筛选下拉框）
+// 获取地市/公司/职务可选值（用于筛选下拉框与新增联想）
 app.get('/api/contacts/filters', async (req, res) => {
   try {
     const cities = await query("SELECT DISTINCT city FROM contacts WHERE city IS NOT NULL AND city != '' ORDER BY city");
-    const companies = await query("SELECT DISTINCT company FROM contacts WHERE company IS NOT NULL AND company != '' ORDER BY company");
+    const positions = await query("SELECT DISTINCT `position` FROM contacts WHERE `position` IS NOT NULL AND `position` != '' ORDER BY `position`");
+
+    // 公司列表按 company_order 中保存的顺序排列；未设置顺序的新公司自动追加到末尾
+    const companyRows = await query("SELECT DISTINCT company FROM contacts WHERE company IS NOT NULL AND company != ''");
+    const orderedRows = await query('SELECT company FROM company_order ORDER BY sort_order ASC');
+    const orderedSet = new Set(orderedRows.map(r => r.company));
+    const existingCompanies = companyRows.map(r => r.company);
+    const orderedCompanies = orderedRows
+      .map(r => r.company)
+      .filter(c => existingCompanies.includes(c));
+    const newCompanies = existingCompanies
+      .filter(c => !orderedSet.has(c))
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    const companies = [...orderedCompanies, ...newCompanies];
+
+    // 把新公司写入 company_order，下次即可保持顺序
+    if (newCompanies.length > 0) {
+      const [maxRow] = await query('SELECT MAX(sort_order) AS max_order FROM company_order');
+      let nextOrder = (maxRow && maxRow.max_order != null) ? maxRow.max_order + 1 : 0;
+      const values = newCompanies.flatMap(c => [c, nextOrder++]);
+      const placeholders = newCompanies.map(() => '(?, ?)').join(', ');
+      await query(`INSERT INTO company_order (company, sort_order) VALUES ${placeholders} ON DUPLICATE KEY UPDATE sort_order = VALUES(sort_order)`, values);
+    }
+
     res.json({
       success: true,
       data: {
         cities: cities.map(r => r.city),
-        companies: companies.map(r => r.company),
+        companies: companies,
+        positions: positions.map(r => r.position),
       },
     });
   } catch (err) {
     res.status(500).json({ error: '获取筛选项失败', message: err.message });
+  }
+});
+
+// 保存公司排序（联系人页面公司多选下拉可拖动排序）
+app.post('/api/contacts/company-order', async (req, res) => {
+  const order = req.body && req.body.order;
+  if (!Array.isArray(order)) {
+    return res.status(400).json({ error: 'order 必须是数组' });
+  }
+  const conn = await getPool().getConnection();
+  try {
+    await conn.beginTransaction();
+    await conn.execute('DELETE FROM company_order');
+    if (order.length > 0) {
+      const placeholders = order.map(() => '(?, ?)').join(', ');
+      const values = order.flatMap((c, i) => [String(c), i]);
+      await conn.execute(`INSERT INTO company_order (company, sort_order) VALUES ${placeholders}`, values);
+    }
+    await conn.commit();
+    res.json({ success: true });
+  } catch (err) {
+    await conn.rollback();
+    console.error('保存公司排序失败:', err);
+    res.status(500).json({ error: '保存公司排序失败', message: err.message });
+  } finally {
+    conn.release();
   }
 });
 
@@ -795,8 +845,15 @@ app.get('/api/contacts', async (req, res) => {
       params.push(city);
     }
     if (company) {
-      where += ' AND `company` = ?';
-      params.push(company);
+      // 支持逗号分隔的多公司筛选
+      const companies = String(company).split(',').map(s => s.trim()).filter(Boolean);
+      if (companies.length === 1) {
+        where += ' AND `company` = ?';
+        params.push(companies[0]);
+      } else if (companies.length > 1) {
+        where += ` AND \`company\` IN (${companies.map(() => '?').join(',')})`;
+        params.push(...companies);
+      }
     }
 
     // 排序字段白名单，防止注入

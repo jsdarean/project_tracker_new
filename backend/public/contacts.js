@@ -8,6 +8,9 @@ let editingId = null;
 let modalDraft = {};
 let sortField = '';
 let sortOrder = 'asc';
+let knownCompanies = [];
+let knownPositions = [];
+let currentCompanyList = [];
 
 const fields = [
   { key: 'city', label: '地市' },
@@ -27,7 +30,10 @@ const tableHeadRow = document.getElementById('headerRow');
 const tableBody = document.querySelector('#contactsTable tbody');
 const searchInput = document.getElementById('searchInput');
 const cityFilter = document.getElementById('cityFilter');
-const companyFilter = document.getElementById('companyFilter');
+const companyMulti = document.getElementById('companyMulti');
+const companyMultiBtn = document.getElementById('companyMultiBtn');
+const companyMultiPanel = document.getElementById('companyMultiPanel');
+const selectedCompanies = new Set();
 const addBtn = document.getElementById('addBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
@@ -64,22 +70,76 @@ async function loadFilterOptions() {
     if (!resp.ok) return;
     const result = await resp.json();
     if (!result.success) return;
-    const { cities = [], companies = [] } = result.data || {};
+    const { cities = [], companies = [], positions = [] } = result.data || {};
+    knownCompanies = companies;
+    knownPositions = positions;
     for (const c of cities) {
       const opt = document.createElement('option');
       opt.value = c;
       opt.textContent = c;
       cityFilter.appendChild(opt);
     }
-    for (const c of companies) {
-      const opt = document.createElement('option');
-      opt.value = c;
-      opt.textContent = c;
-      companyFilter.appendChild(opt);
-    }
+    renderCompanyMulti(companies);
   } catch (err) {
     console.error('加载筛选项失败:', err);
   }
+}
+
+/* ---------- 公司多选筛选 ---------- */
+
+function renderCompanyMulti(companies) {
+  currentCompanyList = [...companies];
+  companyMultiPanel.innerHTML = '';
+
+  // 顶部“全选”项
+  const allLabel = document.createElement('label');
+  allLabel.className = 'multi-select-item multi-select-all';
+  allLabel.innerHTML = `<input type="checkbox" id="companySelectAll"> <span>（全选）</span>`;
+  companyMultiPanel.appendChild(allLabel);
+
+  for (let i = 0; i < companies.length; i++) {
+    const c = companies[i];
+    const label = document.createElement('label');
+    label.className = 'multi-select-item';
+    label.dataset.index = i;
+    label.dataset.value = c;
+    const checked = selectedCompanies.has(c) ? 'checked' : '';
+    label.innerHTML = `<span class="drag-handle" draggable="true" title="拖动排序">≡</span><input type="checkbox" value="${escapeHtml(c)}" ${checked}> <span>${escapeHtml(c)}</span>`;
+    companyMultiPanel.appendChild(label);
+  }
+
+  syncSelectAllState();
+}
+
+function getCompanyItemCbs() {
+  return Array.from(companyMultiPanel.querySelectorAll('input[type="checkbox"]:not(#companySelectAll)'));
+}
+
+function syncSelectAllState() {
+  const selectAllCb = document.getElementById('companySelectAll');
+  if (!selectAllCb) return;
+  const itemCbs = getCompanyItemCbs();
+  const n = selectedCompanies.size;
+  selectAllCb.checked = n === itemCbs.length && itemCbs.length > 0;
+  selectAllCb.indeterminate = n > 0 && n < itemCbs.length;
+}
+
+function updateCompanyMultiBtn() {
+  const total = companyMultiPanel.querySelectorAll('input[type="checkbox"]').length;
+  const n = selectedCompanies.size;
+  if (n === 0 || n === total) {
+    companyMultiBtn.textContent = '全部公司 ▾';
+  } else if (n === 1) {
+    companyMultiBtn.textContent = `${Array.from(selectedCompanies)[0]} ▾`;
+  } else {
+    companyMultiBtn.textContent = `已选 ${n} 家公司 ▾`;
+  }
+}
+
+function getCompanyFilterValue() {
+  const total = companyMultiPanel.querySelectorAll('input[type="checkbox"]').length;
+  if (selectedCompanies.size === 0 || selectedCompanies.size === total) return '';
+  return Array.from(selectedCompanies).join(',');
 }
 
 function buildModalForm() {
@@ -112,6 +172,49 @@ function buildModalForm() {
   oaInput.addEventListener('input', () => {
     clearTimeout(oaTimer);
     oaTimer = setTimeout(searchOaContacts, 300);
+  });
+
+  // 公司、职务联想（基于已录入的数据，也可手动输入新值）
+  setupAutocomplete('field-company', () => knownCompanies);
+  setupAutocomplete('field-position', () => knownPositions);
+}
+
+function setupAutocomplete(inputId, getOptions) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  input.setAttribute('autocomplete', 'off');
+  const wrap = document.createElement('div');
+  wrap.className = 'autocomplete-wrap';
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const list = document.createElement('div');
+  list.className = 'autocomplete-list';
+  list.style.display = 'none';
+  wrap.appendChild(list);
+
+  function renderList() {
+    const q = input.value.trim().toLowerCase();
+    const opts = getOptions().filter(o => o && (!q || o.toLowerCase().includes(q)));
+    if (opts.length === 0) {
+      list.style.display = 'none';
+      return;
+    }
+    list.innerHTML = opts.map(o => `<div class="autocomplete-item" data-value="${escapeHtml(o)}">${escapeHtml(o)}</div>`).join('');
+    list.style.display = 'block';
+  }
+
+  input.addEventListener('focus', renderList);
+  input.addEventListener('input', renderList);
+  input.addEventListener('blur', () => {
+    setTimeout(() => { list.style.display = 'none'; }, 150);
+  });
+  list.addEventListener('mousedown', (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    e.preventDefault();
+    input.value = item.dataset.value;
+    input.dispatchEvent(new Event('input', { bubbles: true })); // 触发草稿记录
+    list.style.display = 'none';
   });
 }
 
@@ -191,9 +294,101 @@ function bindEvents() {
     loadData();
   });
 
-  companyFilter.addEventListener('change', () => {
+  // 公司多选下拉展开/收起
+  companyMultiBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = companyMultiPanel.style.display !== 'none';
+    companyMultiPanel.style.display = isOpen ? 'none' : 'block';
+  });
+  companyMultiPanel.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+  document.addEventListener('click', () => {
+    companyMultiPanel.style.display = 'none';
+  });
+
+  // 公司多选：复选框变更（事件委托）
+  companyMultiPanel.addEventListener('change', (e) => {
+    const cb = e.target.closest('input[type="checkbox"]');
+    if (!cb) return;
+    if (cb.id === 'companySelectAll') {
+      const itemCbs = getCompanyItemCbs();
+      if (cb.checked) {
+        itemCbs.forEach(item => {
+          item.checked = true;
+          selectedCompanies.add(item.value);
+        });
+      } else {
+        itemCbs.forEach(item => { item.checked = false; });
+        selectedCompanies.clear();
+      }
+    } else {
+      if (cb.checked) selectedCompanies.add(cb.value);
+      else selectedCompanies.delete(cb.value);
+      syncSelectAllState();
+    }
+    updateCompanyMultiBtn();
     currentPage = 1;
     loadData();
+  });
+
+  // 公司多选：拖动排序
+  let dragSrcLabel = null;
+  companyMultiPanel.addEventListener('dragstart', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) {
+      e.preventDefault();
+      return;
+    }
+    const label = handle.closest('.multi-select-item');
+    dragSrcLabel = label;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', label.dataset.index);
+    label.classList.add('dragging');
+  });
+  companyMultiPanel.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const label = e.target.closest('.multi-select-item');
+    if (!label || label.classList.contains('multi-select-all') || label === dragSrcLabel) return;
+    e.dataTransfer.dropEffect = 'move';
+    label.classList.add('drag-over');
+  });
+  companyMultiPanel.addEventListener('dragleave', (e) => {
+    const label = e.target.closest('.multi-select-item');
+    if (label) label.classList.remove('drag-over');
+  });
+  companyMultiPanel.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const label = e.target.closest('.multi-select-item');
+    if (!label || label.classList.contains('multi-select-all') || label === dragSrcLabel) return;
+    const srcIdx = Number(dragSrcLabel ? dragSrcLabel.dataset.index : -1);
+    const dstIdx = Number(label.dataset.index);
+    if (srcIdx < 0 || srcIdx === dstIdx) return;
+
+    const newList = [...currentCompanyList];
+    const [moved] = newList.splice(srcIdx, 1);
+    newList.splice(dstIdx, 0, moved);
+
+    // 先保存到数据库，再重新渲染（保持当前选中状态）
+    try {
+      const resp = await fetch(`${API_BASE}/api/contacts/company-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: newList }),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    } catch (err) {
+      console.error('保存公司排序失败:', err);
+      alert('保存排序失败：' + err.message);
+      return;
+    }
+    renderCompanyMulti(newList);
+  });
+  companyMultiPanel.addEventListener('dragend', () => {
+    companyMultiPanel.querySelectorAll('.multi-select-item').forEach(el => {
+      el.classList.remove('dragging', 'drag-over');
+    });
+    dragSrcLabel = null;
   });
 
   tableHeadRow.addEventListener('click', (e) => {
@@ -248,7 +443,8 @@ async function loadData() {
     const params = new URLSearchParams({ page: currentPage, pageSize });
     if (keyword) params.append('keyword', keyword);
     if (cityFilter.value) params.append('city', cityFilter.value);
-    if (companyFilter.value) params.append('company', companyFilter.value);
+    const companyVal = getCompanyFilterValue();
+    if (companyVal) params.append('company', companyVal);
     if (sortField) {
       params.append('sort', sortField);
       params.append('order', sortOrder);

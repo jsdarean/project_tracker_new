@@ -218,6 +218,13 @@ const escalationRuleColumns = [
   '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
 ];
 
+// 联系人页面公司排序表（company 为主键，sort_order 越小越靠前）
+const companyOrderColumns = [
+  '`company` VARCHAR(200) NOT NULL COMMENT \'公司\'',
+  '`sort_order` INT NOT NULL DEFAULT 0 COMMENT \'排序\'',
+  '`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT \'创建时间\'',
+];
+
 function parseColumnName(colDef) {
   const m = colDef.match(/^`([^`]+)`/);
   return m ? m[1] : '';
@@ -528,6 +535,21 @@ async function initDatabase() {
        ('progress_reminder', '每周进展提醒', '【进展提醒】以下项目超过 14 天未更新进展', '以下项目超过 14 天未更新进展（或从未填报），请提醒项目经理及时填报：\n\n{{stale_projects}}\n\n项目跟踪系统')`
     );
     console.log('插入默认邮件模板: 2 个');
+  }
+
+  // 创建公司排序表
+  const createCompanyOrderSql = `
+    CREATE TABLE IF NOT EXISTS \`company_order\` (
+      ${companyOrderColumns.join(',\n      ').replace(/AUTO_INCREMENT\s+COMMENT/, 'COMMENT')},
+      PRIMARY KEY (\`company\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+  await query(createCompanyOrderSql);
+
+  // 为已存在的公司排序表补充/更新字段注释
+  for (const colDef of companyOrderColumns) {
+    const alterStmt = `ALTER TABLE \`company_order\` MODIFY COLUMN ${colDef}`;
+    await db.query(alterStmt);
   }
 
   console.log('数据库与表初始化完成:', dbName);

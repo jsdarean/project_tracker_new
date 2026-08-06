@@ -905,6 +905,137 @@ td .btn-small + .btn-small {
   background: rgba(83, 58, 253, 0.08);
 }
 
+/* 公司多选筛选下拉 */
+.multi-select {
+  position: relative;
+}
+
+.multi-select-btn {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 300;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--hairline-input);
+  border-radius: var(--rounded-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  white-space: nowrap;
+  min-width: 120px;
+  text-align: left;
+}
+
+.multi-select-btn:hover,
+.multi-select-btn:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.multi-select-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid var(--hairline-input);
+  border-radius: var(--rounded-sm);
+  box-shadow: 0 4px 12px rgba(0, 55, 112, 0.12);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 30;
+  padding: var(--space-xs) 0;
+}
+
+.multi-select-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.multi-select-item:hover {
+  background: rgba(83, 58, 253, 0.06);
+}
+
+.multi-select-all {
+  font-weight: 400;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.multi-select-item input[type="checkbox"] {
+  /* 覆盖 .toolbar input 的 flex:1 和 min-width:240px，避免勾选框被撑大 */
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+  margin: 0;
+}
+
+.multi-select-item .drag-handle {
+  flex: 0 0 auto;
+  cursor: grab;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  user-select: none;
+}
+
+.multi-select-item .drag-handle:active {
+  cursor: grabbing;
+}
+
+.multi-select-item.dragging {
+  opacity: 0.5;
+  background: rgba(83, 58, 253, 0.1);
+}
+
+.multi-select-item.drag-over {
+  background: rgba(83, 58, 253, 0.2);
+}
+
+/* 输入联想下拉 */
+.autocomplete-wrap {
+  position: relative;
+}
+
+.autocomplete-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  background: #fff;
+  border: 1px solid var(--hairline-input);
+  border-radius: var(--rounded-sm);
+  box-shadow: 0 4px 12px rgba(0, 55, 112, 0.12);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.autocomplete-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.autocomplete-item:hover {
+  background: rgba(83, 58, 253, 0.08);
+}
+
 /* 可排序表头 */
 th.sortable {
   cursor: pointer;
