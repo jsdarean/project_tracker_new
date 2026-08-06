@@ -44,14 +44,34 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
   }
 
   const trans = transport || createTransport(settings);
+  let info;
   try {
-    const info = await trans.sendMail({
+    info = await trans.sendMail({
       from: settings.mail_from || settings.smtp_user,
       to: toList.join(','),
       cc: ccList.length > 0 ? ccList.join(',') : undefined,
       subject,
       text: body,
     });
+  } catch (err) {
+    const errorMsg = String((err && err.message) || err).slice(0, 500);
+    let logId = null;
+    try {
+      const result = await query(
+        `INSERT INTO email_logs (issue_id, rule_id, token, recipients, cc, subject, body, status, error_msg)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?)`,
+        [issueId || null, ruleId || null, token || null, toList.join(','), ccList.join(','),
+         subject, body, errorMsg]
+      );
+      logId = result.insertId;
+    } catch (logErr) {
+      console.error('失败日志写入失败:', logErr.message);
+    }
+    return { logId, status: 'failed', error: errorMsg };
+  }
+
+  // 邮件已发出：日志写入失败只记 console，绝不能误记 failed（否则下周期重复发信）
+  try {
     const result = await query(
       `INSERT INTO email_logs (issue_id, rule_id, message_id, token, recipients, cc, subject, body, status)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent')`,
@@ -59,15 +79,9 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
        toList.join(','), ccList.join(','), subject, body]
     );
     return { logId: result.insertId, status: 'sent', messageId: info.messageId };
-  } catch (err) {
-    const errorMsg = String((err && err.message) || err).slice(0, 500);
-    const result = await query(
-      `INSERT INTO email_logs (issue_id, rule_id, token, recipients, cc, subject, body, status, error_msg)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'failed', ?)`,
-      [issueId || null, ruleId || null, token || null, toList.join(','), ccList.join(','),
-       subject, body, errorMsg]
-    );
-    return { logId: result.insertId, status: 'failed', error: errorMsg };
+  } catch (logErr) {
+    console.error('发送日志写入失败（邮件已发送）:', logErr.message);
+    return { logId: null, status: 'sent', messageId: info.messageId };
   }
 }
 

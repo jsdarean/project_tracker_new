@@ -128,50 +128,56 @@ async function runDailyEscalation(settings, deps = {}) {
     for (const rule of rules) {
       if (!ruleMatches(rule, issue, todayStr)) continue;
       stats.matched += 1;
-      if (await recentlyBlocked(issue.id, rule.id, rule.min_interval_hours || 24, now)) continue;
+      // 单条 (issue, rule) 处理失败记 failed 并继续，不中断整批
+      try {
+        if (await recentlyBlocked(issue.id, rule.id, rule.min_interval_hours || 24, now)) continue;
 
-      const toRoles = String(rule.to_roles || '').split(',').map((s) => s.trim()).filter(Boolean);
-      const ccRoles = String(rule.cc_roles || '').split(',').map((s) => s.trim()).filter(Boolean);
-      const to = await resolveRoleEmails(issue, toRoles, settings);
-      const cc = await resolveRoleEmails(issue, ccRoles, settings);
+        const toRoles = String(rule.to_roles || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const ccRoles = String(rule.cc_roles || '').split(',').map((s) => s.trim()).filter(Boolean);
+        const to = await resolveRoleEmails(issue, toRoles, settings);
+        const cc = await resolveRoleEmails(issue, ccRoles, settings);
 
-      if (to.emails.length === 0 && cc.emails.length === 0) {
-        await query(
-          `INSERT INTO email_logs (issue_id, rule_id, recipients, cc, subject, body, status, error_msg)
-           VALUES (?, ?, '', '', ?, '', 'skipped', ?)`,
-          [issue.id, rule.id, `规则「${rule.name}」`, `邮箱缺失：${[...to.missing, ...cc.missing].join('、')}`]
-        );
-        stats.skipped += 1;
-        continue;
+        if (to.emails.length === 0 && cc.emails.length === 0) {
+          await query(
+            `INSERT INTO email_logs (issue_id, rule_id, recipients, cc, subject, body, status, error_msg)
+             VALUES (?, ?, '', '', ?, '', 'skipped', ?)`,
+            [issue.id, rule.id, `规则「${rule.name}」`, `邮箱缺失：${[...to.missing, ...cc.missing].join('、')}`]
+          );
+          stats.skipped += 1;
+          continue;
+        }
+
+        const template = templateMap[rule.template_code] || DEFAULT_ISSUE_TEMPLATE;
+        const baseUrl = String(settings.public_base_url || 'http://localhost:3000').replace(/\/$/, '');
+        const token = mailer.generateToken();
+        const overdueDays = Math.max(0, daysBetween(issue.due_date, todayStr));
+        const vars = {
+          issue_no: issue.issue_no,
+          title: issue.title,
+          assignee: issue.assignee || '',
+          due_date: issue.due_date || '',
+          overdue_days: overdueDays,
+          project_name: issue.project_name || '',
+          detail_url: `${baseUrl}/issue_detail.html?id=${issue.id}`,
+          ack_url: `${baseUrl}/api/issues/${issue.id}/ack?token=${token}`,
+        };
+        const result = await sendMailFn({
+          settings,
+          to: to.emails,
+          cc: cc.emails,
+          subject: mailer.renderTemplate(template.subject, vars),
+          body: mailer.renderTemplate(template.body, vars),
+          issueId: issue.id,
+          ruleId: rule.id,
+          token,
+        });
+        if (result.status === 'sent') stats.sent += 1;
+        else if (result.status === 'skipped') stats.skipped += 1;
+        else stats.failed += 1;
+      } catch (err) {
+        stats.failed += 1;
+        console.error(`催办处理失败（问题 ${issue.id} / 规则 ${rule.id}）:`, err.message);
       }
-
-      const template = templateMap[rule.template_code] || DEFAULT_ISSUE_TEMPLATE;
-      const baseUrl = String(settings.public_base_url || 'http://localhost:3000').replace(/\/$/, '');
-      const token = mailer.generateToken();
-      const overdueDays = Math.max(0, daysBetween(issue.due_date, todayStr));
-      const vars = {
-        issue_no: issue.issue_no,
-        title: issue.title,
-        assignee: issue.assignee || '',
-        due_date: issue.due_date || '',
-        overdue_days: overdueDays,
-        project_name: issue.project_name || '',
-        detail_url: `${baseUrl}/issue_detail.html?id=${issue.id}`,
-        ack_url: `${baseUrl}/api/issues/${issue.id}/ack?token=${token}`,
-      };
-      const result = await sendMailFn({
-        settings,
-        to: to.emails,
-        cc: cc.emails,
-        subject: mailer.renderTemplate(template.subject, vars),
-        body: mailer.renderTemplate(template.body, vars),
-        issueId: issue.id,
-        ruleId: rule.id,
-        token,
-      });
-      if (result.status === 'sent') stats.sent += 1;
-      else if (result.status === 'skipped') stats.skipped += 1;
-      else stats.failed += 1;
     }
   }
   return stats;

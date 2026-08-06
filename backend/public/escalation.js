@@ -61,10 +61,15 @@ function renderRules(rules) {
 
   rulesBody.querySelectorAll('.rule-enabled').forEach(cb => {
     cb.addEventListener('change', async () => {
-      await api(`/api/escalation/rules/${cb.getAttribute('data-id')}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: cb.checked ? 1 : 0 }),
-      });
+      try {
+        await api(`/api/escalation/rules/${cb.getAttribute('data-id')}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: cb.checked ? 1 : 0 }),
+        });
+      } catch (err) {
+        cb.checked = !cb.checked; // 还原勾选状态，避免与服务端不同步
+        alert('更新失败：' + err.message);
+      }
     });
   });
   rulesBody.querySelectorAll('.rule-edit').forEach(btn => {
@@ -73,8 +78,12 @@ function renderRules(rules) {
   rulesBody.querySelectorAll('.rule-del').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('确定删除该规则吗？')) return;
-      await api(`/api/escalation/rules/${btn.getAttribute('data-id')}`, { method: 'DELETE' });
-      loadRules();
+      try {
+        await api(`/api/escalation/rules/${btn.getAttribute('data-id')}`, { method: 'DELETE' });
+        loadRules();
+      } catch (err) {
+        alert('删除失败：' + err.message);
+      }
     });
   });
 }

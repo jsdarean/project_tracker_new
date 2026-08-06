@@ -175,3 +175,33 @@ test('runWeeklyProgressReminder：有 stale 才发，leader 为空 skipped', asy
   assert.strictEqual(calls2.length, 0);
   assert.ok(stats2.skipped >= 1);
 });
+
+test('runDailyEscalation：单问题发信抛异常不中断整批', async () => {
+  await db.query('DELETE FROM escalation_rules');
+  await db.query('DELETE FROM issues');
+
+  await seedIssue({ title: '异常问题', due_date: '2026-08-09' });
+  await seedIssue({ title: '正常问题', due_date: '2026-08-09' });
+  await seedRule({ days_after_due: 1, to_roles: 'assignee' });
+
+  const calls = [];
+  let thrown = false;
+  const deps = {
+    now: new Date(2026, 7, 10, 9, 0, 0),
+    sendMailFn: async (args) => {
+      if (!thrown && args.body.includes('异常问题')) {
+        thrown = true;
+        throw new Error('模拟 DB 抖动');
+      }
+      calls.push(args);
+      return { logId: 1, status: 'sent' };
+    },
+  };
+  const stats = await runDailyEscalation(
+    { escalation_enabled: true, send_on_weekend: true, public_base_url: 'http://localhost:3000' },
+    deps
+  );
+  assert.strictEqual(stats.failed, 1, '异常问题应计 failed');
+  assert.strictEqual(calls.length, 1, '正常问题应继续处理并发信');
+  assert.ok(!calls[0].body.includes('异常问题'), '成功发出的不应是异常问题');
+});
