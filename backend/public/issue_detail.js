@@ -23,6 +23,7 @@ const fDueDate = document.getElementById('fDueDate');
 const fDescription = document.getElementById('fDescription');
 const saveBtn = document.getElementById('saveBtn');
 const reopenBtn = document.getElementById('reopenBtn');
+const muteBtn = document.getElementById('muteBtn');
 const deleteBtn = document.getElementById('deleteBtn');
 const solutionHistory = document.getElementById('solutionHistory');
 const solutionText = document.getElementById('solutionText');
@@ -103,6 +104,12 @@ function initEditMode() {
   commentAuthor.value = localStorage.getItem('progress_reporter') || '';
   commentSubmitBtn.onclick = submitComment;
   loadComments();
+
+  muteBtn.style.display = '';
+  muteBtn.textContent = currentIssue.escalation_muted ? '恢复催办' : '暂停催办';
+  if (currentIssue.escalation_muted) {
+    pageSubtitle.textContent = `所属项目：${currentIssue.project_name || ''} · 已暂停催办`;
+  }
 }
 
 async function loadProjects() {
@@ -231,6 +238,23 @@ reopenBtn.addEventListener('click', async () => {
     initEditMode();
   } catch (err) {
     alert('重新打开失败：' + err.message);
+  }
+});
+
+muteBtn.addEventListener('click', async () => {
+  try {
+    const next = currentIssue.escalation_muted ? 0 : 1;
+    const resp = await fetch(`${API_BASE}/api/issues/${issueId}/escalation-muted`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ muted: next }),
+    });
+    const result = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(result.message || result.error || `HTTP ${resp.status}`);
+    await loadIssue();
+    initEditMode();
+  } catch (err) {
+    alert('操作失败：' + err.message);
   }
 });
 
