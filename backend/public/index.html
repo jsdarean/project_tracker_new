@@ -72,8 +72,9 @@
           <div id="overviewRecent" class="overview-list">加载中...</div>
         </div>
         <div class="overview-col">
-          <h3>进展滞后 / 未填报</h3>
-          <div id="overviewStale" class="overview-list">加载中...</div>
+          <h3>进展滞后 / 未填报 <button type="button" id="staleToggle" class="btn-small btn-secondary">展开</button></h3>
+          <div id="staleSummary" class="overview-empty"></div>
+          <div id="overviewStale" class="overview-list" style="display: none;">加载中...</div>
         </div>
       </div>
     </div>
@@ -99,6 +100,6 @@
     </div>
   </main>
 
-  <script src="app.js?v=29"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>

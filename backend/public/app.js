@@ -69,6 +69,9 @@ const pageInfo = document.getElementById('pageInfo');
 const overviewToggle = document.getElementById('overviewToggle');
 const overviewRecent = document.getElementById('overviewRecent');
 const overviewStale = document.getElementById('overviewStale');
+const staleToggle = document.getElementById('staleToggle');
+const staleSummary = document.getElementById('staleSummary');
+let staleExpanded = false;
 let selectAllCheckbox = null;
 
 async function init() {
@@ -76,6 +79,7 @@ async function init() {
   await loadExportSettings();
   refreshHeader();
   await loadData();
+  applyStaleVisibility();
   loadOverview();
 }
 
@@ -427,16 +431,24 @@ function renderOverviewRecent(items) {
 }
 
 function renderOverviewStale(items) {
+  staleSummary.textContent = items.length === 0 ? '没有滞后的项目' : `共 ${items.length} 个项目滞后/未填报`;
   if (items.length === 0) {
     overviewStale.innerHTML = '<div class="overview-empty">没有滞后的项目</div>';
-    return;
+  } else {
+    overviewStale.innerHTML = items.map(item => {
+      const label = item.last_progress_date
+        ? `<span class="stale-text">${item.days_stale} 天未更新</span>`
+        : '<span class="never-text">从未填报</span>';
+      return `<div class="overview-item"><a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 24))}</a> ${label}</div>`;
+    }).join('');
   }
-  overviewStale.innerHTML = items.map(item => {
-    const label = item.last_progress_date
-      ? `<span class="stale-text">${item.days_stale} 天未更新</span>`
-      : '<span class="never-text">从未填报</span>';
-    return `<div class="overview-item"><a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 24))}</a> ${label}</div>`;
-  }).join('');
+  applyStaleVisibility();
+}
+
+function applyStaleVisibility() {
+  staleSummary.style.display = staleExpanded ? 'none' : '';
+  overviewStale.style.display = staleExpanded ? '' : 'none';
+  staleToggle.textContent = staleExpanded ? '收起' : '展开';
 }
 
 function showLoading(show) {
@@ -498,6 +510,11 @@ overviewToggle.addEventListener('click', () => {
   const hidden = body.style.display === 'none';
   body.style.display = hidden ? '' : 'none';
   arrow.textContent = hidden ? '▼' : '▶';
+});
+
+staleToggle.addEventListener('click', () => {
+  staleExpanded = !staleExpanded;
+  applyStaleVisibility();
 });
 
 tableBody.addEventListener('click', async (e) => {
