@@ -84,6 +84,7 @@ async function init() {
       loadProgress();
     });
     progressAddBtn.addEventListener('click', () => openProgressModal(null));
+    attachTableEditor(pfCompleted, document.getElementById('pfCompletedTableBtn'));
     progressCancelBtn.addEventListener('click', closeProgressModal);
     progressForm.addEventListener('submit', submitProgressForm);
     progressTimeline.addEventListener('click', (e) => {
@@ -200,9 +201,9 @@ function renderProgressTimeline(items) {
         </span>
       </div>
       <div class="timeline-body">
-        <div class="timeline-field"><span class="timeline-label">完成内容</span><div class="timeline-value">${escapeHtml(item.completed_content || '')}</div></div>
-        ${item.next_plan ? `<div class="timeline-field"><span class="timeline-label">下阶段计划</span><div class="timeline-value">${escapeHtml(item.next_plan)}</div></div>` : ''}
-        ${item.risk_note ? `<div class="timeline-field"><span class="timeline-label">风险说明</span><div class="timeline-value timeline-risk">${escapeHtml(item.risk_note)}</div></div>` : ''}
+        <div class="timeline-field"><span class="timeline-label">完成内容</span><div class="timeline-value">${renderMarkdownTables(item.completed_content || '')}</div></div>
+        ${item.next_plan ? `<div class="timeline-field"><span class="timeline-label">下阶段计划</span><div class="timeline-value">${renderMarkdownTables(item.next_plan)}</div></div>` : ''}
+        ${item.risk_note ? `<div class="timeline-field"><span class="timeline-label">风险说明</span><div class="timeline-value timeline-risk">${renderMarkdownTables(item.risk_note)}</div></div>` : ''}
       </div>
     </div>`;
   }).join('');

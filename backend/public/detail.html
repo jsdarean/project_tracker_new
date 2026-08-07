@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>项目详情</title>
-  <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="style.css?v=30">
   <style>
     .detail-section { margin-bottom: var(--space-lg); }
     .detail-section h2 {
@@ -218,7 +218,7 @@
             <input type="date" id="pfReportDate" required>
           </div>
           <div class="modal-field">
-            <label for="pfCompleted">完成内容 *</label>
+            <label for="pfCompleted">完成内容 * <button type="button" id="pfCompletedTableBtn" class="btn-small table-btn">表格</button></label>
             <textarea id="pfCompleted" rows="4" required></textarea>
           </div>
           <div class="modal-field">
@@ -250,6 +250,8 @@
     </div>
   </main>
 
+  <script src="markdown-table.js?v=1"></script>
+  <script src="table-editor.js?v=1"></script>
   <script src="detail.js"></script>
 </body>
 </html>
