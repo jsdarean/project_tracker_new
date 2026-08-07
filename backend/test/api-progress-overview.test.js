@@ -95,12 +95,13 @@ test('recent 每个项目只保留最新一条且最多 10 条', async () => {
       [pr.insertId, daysAgo(0), `上限进展${i}`]
     );
   }
-  // 去重项目最后建，新进展为今天且 id 最大，确保 LIMIT 10 内可见
+  // 去重项目最后建，两条进展同为今天（旧进展 id 小、新进展 id 最大），
+  // 不去重时两条都会进入 recent 使本用例变红，去重后按 id 最大保留新进展
   const r = await db.query(`INSERT INTO projects (project_name, project_status) VALUES ('去重项目', '进行中')`);
   const dupId = r.insertId;
   await db.query(
     `INSERT INTO project_progress (project_id, report_date, completed_content) VALUES (?, ?, '旧进展'), (?, ?, '新进展')`,
-    [dupId, daysAgo(9), dupId, daysAgo(0)]
+    [dupId, daysAgo(0), dupId, daysAgo(0)]
   );
 
   const resp = await fetch(`${baseUrl}/api/progress/overview`);
