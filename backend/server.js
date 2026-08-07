@@ -728,12 +728,19 @@ app.delete('/api/progress/:id', async (req, res) => {
 // 首页进展概览：最近更新 + 进展滞后/未填报（stale 排除已结项项目）
 app.get('/api/progress/overview', async (req, res) => {
   try {
+    // 每个项目只取最新一条进展（按 report_date，同日取 id 最大者），最多 10 条
     const recent = await query(
       `SELECT pp.id, pp.project_id, p.project_name, pp.report_date, pp.completed_content, pp.tags, pp.reporter
        FROM project_progress pp
        JOIN projects p ON p.id = pp.project_id
+       WHERE pp.id = (
+         SELECT p2.id FROM project_progress p2
+         WHERE p2.project_id = pp.project_id
+         ORDER BY p2.report_date DESC, p2.id DESC
+         LIMIT 1
+       )
        ORDER BY pp.report_date DESC, pp.id DESC
-       LIMIT 5`
+       LIMIT 10`
     );
 
     const stale = await query(

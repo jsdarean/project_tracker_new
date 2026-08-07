@@ -84,3 +84,33 @@ test('GET /api/progress/overview 返回 recent 与 stale，排除已结项', asy
   assert.strictEqual(staleC.last_progress_date, null);
   assert.strictEqual(staleC.days_stale, null);
 });
+
+test('recent 每个项目只保留最新一条且最多 10 条', async () => {
+  // 为隔离已有种子，本用例使用新项目
+  // 先建 11 个各有一条今天进展的项目，验证上限 10（加上种子项目A今天进展共 12 条今日记录）
+  for (let i = 1; i <= 11; i++) {
+    const pr = await db.query(`INSERT INTO projects (project_name, project_status) VALUES (?, '进行中')`, [`上限项目${i}`]);
+    await db.query(
+      `INSERT INTO project_progress (project_id, report_date, completed_content) VALUES (?, ?, ?)`,
+      [pr.insertId, daysAgo(0), `上限进展${i}`]
+    );
+  }
+  // 去重项目最后建，新进展为今天且 id 最大，确保 LIMIT 10 内可见
+  const r = await db.query(`INSERT INTO projects (project_name, project_status) VALUES ('去重项目', '进行中')`);
+  const dupId = r.insertId;
+  await db.query(
+    `INSERT INTO project_progress (project_id, report_date, completed_content) VALUES (?, ?, '旧进展'), (?, ?, '新进展')`,
+    [dupId, daysAgo(9), dupId, daysAgo(0)]
+  );
+
+  const resp = await fetch(`${baseUrl}/api/progress/overview`);
+  const body = await resp.json();
+  const recent = body.data.recent;
+
+  const dupRows = recent.filter((x) => x.project_id === dupId);
+  assert.strictEqual(dupRows.length, 1, '同一项目只出现一次');
+  assert.strictEqual(dupRows[0].completed_content, '新进展', '保留的是最新一条');
+  assert.ok(recent.length <= 10, 'recent 最多 10 条');
+  const projectIds = recent.map((x) => x.project_id);
+  assert.strictEqual(new Set(projectIds).size, projectIds.length, '无重复项目');
+});
