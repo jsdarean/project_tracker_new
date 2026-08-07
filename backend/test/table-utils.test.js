@@ -91,3 +91,13 @@ test('findTableRange：光标在表格段但不是合法表格时返回 null', (
   const text = '| a | b |\n| 1 | 2 |';
   assert.strictEqual(findTableRange(text, 3, 3), null, '缺分隔行的段不算表格');
 });
+
+test('markdownToGrid：无首尾管道的表格也可载入（与展示端判定对齐）', () => {
+  const grid = markdownToGrid('任务 | 负责人\n---|---\n设计 | 张三');
+  assert.deepStrictEqual(grid, [['任务', '负责人'], ['设计', '张三']]);
+});
+
+test('markdownToGrid：转义竖线切分不依赖负后顾（字符循环实现）', () => {
+  const grid = markdownToGrid('| a |\n|---|\n| x\\|y |');
+  assert.deepStrictEqual(grid, [['a'], ['x|y']]);
+});

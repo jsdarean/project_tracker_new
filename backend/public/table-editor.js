@@ -27,14 +27,31 @@
   function markdownToGrid(text) {
     const lines = String(text || '').split('\n').map((l) => l.trim()).filter((l) => l !== '');
     if (lines.length < 2) return null;
-    if (!lines[0].startsWith('|') || !lines[0].endsWith('|')) return null;
-    if (!/^\|[\s:|-]+\|$/.test(lines[1]) || !lines[1].includes('-')) return null;
-    const split = (line) =>
-      line.replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+    if (!lines[0].includes('|')) return null;
+    if (!lines[1].includes('|') || !lines[1].includes('-') || !/^\|?[\s:|-]+\|?$/.test(lines[1])) return null;
+    // 逐字符切分：\| 还原为 |，裸 | 为分隔（不用负后顾，兼容 Safari < 16.4）
+    const split = (line) => {
+      const t = line.replace(/^\|/, '').replace(/\|$/, '');
+      const cells = [];
+      let cur = '';
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] === '\\' && t[i + 1] === '|') {
+          cur += '|';
+          i++;
+        } else if (t[i] === '|') {
+          cells.push(cur.trim());
+          cur = '';
+        } else {
+          cur += t[i];
+        }
+      }
+      cells.push(cur.trim());
+      return cells;
+    };
     const header = split(lines[0]);
     const grid = [header];
     for (const line of lines.slice(2)) {
-      if (!line.startsWith('|') || !line.endsWith('|')) return null;
+      if (!line.includes('|')) return null;
       const cells = split(line);
       if (cells.length !== header.length) return null;
       grid.push(cells);
@@ -71,7 +88,7 @@
       if (offsets[i] <= selStart && selStart <= offsets[i] + lines[i].length) { row = i; break; }
     }
     if (row === -1) return null;
-    const isRow = (l) => { const t = (l || '').trim(); return t.startsWith('|') && t.endsWith('|'); };
+    const isRow = (l) => (l || '').trim().includes('|');
     if (!isRow(lines[row])) return null;
     let start = row;
     let end = row;
