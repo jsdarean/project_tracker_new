@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>问题详情</title>
-  <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="style.css?v=31">
   <style>
     .issue-form {
       display: grid;
@@ -142,8 +142,12 @@
             <input type="date" id="fDueDate">
           </div>
           <div class="form-group full-width">
-            <label for="fDescription">问题描述</label>
+            <label for="fDescription">问题描述 <button type="button" id="fDescTableBtn" class="btn-small table-btn">表格</button></label>
             <textarea id="fDescription"></textarea>
+            <details id="descPreview" class="md-preview">
+              <summary>预览</summary>
+              <div id="descPreviewBody" class="md-preview-body"></div>
+            </details>
           </div>
         </div>
         <datalist id="contactNames"></datalist>
@@ -197,6 +201,8 @@
     </div>
   </main>
 
+  <script src="markdown-table.js?v=1"></script>
+  <script src="table-editor.js?v=1"></script>
   <script src="issue_detail.js"></script>
 </body>
 </html>

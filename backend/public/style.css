@@ -1249,3 +1249,17 @@ th.sortable:hover {
 }
 .te-del:hover { background: rgba(234, 34, 97, 0.08); }
 .te-actions { display: flex; gap: var(--space-md); justify-content: flex-end; margin-top: var(--space-md); }
+
+/* 问题描述预览区 */
+.md-preview { margin-top: var(--space-xs); }
+.md-preview summary { font-size: 12px; color: var(--ink-mute); cursor: pointer; }
+.md-preview-body {
+  margin-top: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--hairline);
+  border-radius: var(--rounded-sm);
+  background: var(--canvas-soft);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

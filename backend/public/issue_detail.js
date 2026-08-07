@@ -21,6 +21,7 @@ const fHelper = document.getElementById('fHelper');
 const fFoundDate = document.getElementById('fFoundDate');
 const fDueDate = document.getElementById('fDueDate');
 const fDescription = document.getElementById('fDescription');
+const descPreviewBody = document.getElementById('descPreviewBody');
 const saveBtn = document.getElementById('saveBtn');
 const reopenBtn = document.getElementById('reopenBtn');
 const muteBtn = document.getElementById('muteBtn');
@@ -61,6 +62,9 @@ async function init() {
     } else {
       throw new Error('缺少参数（new=1 或 id）');
     }
+    attachTableEditor(fDescription, document.getElementById('fDescTableBtn'));
+    fDescription.addEventListener('input', refreshDescPreview);
+    refreshDescPreview();
     hideLoading();
     issueCard.style.display = 'block';
   } catch (err) {
@@ -324,6 +328,10 @@ function formatDateTime(dateStr) {
   if (isNaN(d.getTime())) return dateStr;
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function refreshDescPreview() {
+  descPreviewBody.innerHTML = renderMarkdownTables(fDescription.value);
 }
 
 function hideLoading() { loadingEl.style.display = 'none'; }
