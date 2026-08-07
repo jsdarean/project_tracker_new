@@ -51,3 +51,43 @@ test('中英文混合与空单元格', () => {
   assert.ok(html.includes('<th>金额（万元）</th>'));
   assert.ok(html.includes('<td></td>'));
 });
+
+const { gridToMarkdown, markdownToGrid, parseTsv, findTableRange } = require('../public/table-editor.js');
+
+test('gridToMarkdown 生成紧凑管道表格，空单元格写空格，竖线转义', () => {
+  const grid = [['任务', '负责人'], ['数据库设计', '张三'], ['A|B 测试', '']];
+  const md = gridToMarkdown(grid);
+  assert.strictEqual(
+    md,
+    '| 任务 | 负责人 |\n|---|---|\n| 数据库设计 | 张三 |\n| A\\|B 测试 |   |'
+  );
+});
+
+test('markdownToGrid 解析并与 gridToMarkdown 互逆', () => {
+  const grid = [['任务', '负责人'], ['数据库设计', '张三'], ['A|B 测试', '']];
+  const md = gridToMarkdown(grid);
+  const parsed = markdownToGrid(md);
+  assert.deepStrictEqual(parsed, grid, '解析应与原网格一致（含 \\| 还原与空单元格）');
+  assert.strictEqual(markdownToGrid('没有表格'), null);
+  assert.strictEqual(markdownToGrid('| a |\n缺少分隔行'), null);
+});
+
+test('parseTsv：Excel 粘贴文本解析、尾部空行空列修剪、CRLF', () => {
+  const grid = parseTsv('任务\t负责人\r\n设计\t张三\r\n开发\t李四\r\n');
+  assert.deepStrictEqual(grid, [['任务', '负责人'], ['设计', '张三'], ['开发', '李四']]);
+  assert.deepStrictEqual(parseTsv('a\t\t\n'), [['a']], '尾部全空列被修剪');
+});
+
+test('findTableRange：定位光标处的表格段', () => {
+  const text = '前文\n| a | b |\n|---|---|\n| 1 | 2 |\n后文';
+  const start = text.indexOf('| a');
+  const range = findTableRange(text, start + 5, start + 5);
+  assert.ok(range);
+  assert.strictEqual(text.slice(range.start, range.end), '| a | b |\n|---|---|\n| 1 | 2 |');
+  assert.strictEqual(findTableRange(text, 1, 1), null, '光标在非表格行返回 null');
+});
+
+test('findTableRange：光标在表格段但不是合法表格时返回 null', () => {
+  const text = '| a | b |\n| 1 | 2 |';
+  assert.strictEqual(findTableRange(text, 3, 3), null, '缺分隔行的段不算表格');
+});
