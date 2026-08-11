@@ -101,3 +101,10 @@ test('markdownToGrid：转义竖线切分不依赖负后顾（字符循环实现
   const grid = markdownToGrid('| a |\n|---|\n| x\\|y |');
   assert.deepStrictEqual(grid, [['a'], ['x|y']]);
 });
+
+test('表格外包 md-table-wrap 横向滚动容器', () => {
+  const md = '| a |\n|---|\n| 1 |';
+  const html = renderMarkdownTables(md);
+  assert.ok(html.includes('<div class="md-table-wrap"><table class="md-table">'));
+  assert.ok(html.includes('</table></div>'));
+});

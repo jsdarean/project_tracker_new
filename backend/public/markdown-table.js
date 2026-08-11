@@ -59,13 +59,13 @@
           bodyRows.push(cells);
           j++;
         }
-        let html = '<table class="md-table"><thead><tr>';
+        let html = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
         html += header.map((c) => `<th>${escapeHtml(c)}</th>`).join('');
         html += '</tr></thead><tbody>';
         for (const cells of bodyRows) {
           html += '<tr>' + cells.map((c) => `<td>${escapeHtml(c)}</td>`).join('') + '</tr>';
         }
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         out.push(html);
         i = j;
       } else {

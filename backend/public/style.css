@@ -1263,3 +1263,6 @@ th.sortable:hover {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* Markdown 表格横向滚动容器 */
+.md-table-wrap { overflow-x: auto; max-width: 100%; }
