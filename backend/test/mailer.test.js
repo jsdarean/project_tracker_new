@@ -12,6 +12,12 @@ const SMTP_SETTINGS = {
   smtp_user: 'noreply@example.com', smtp_pass: 'secret', mail_from: '项目跟踪 <noreply@example.com>',
 };
 
+const IMAP_SETTINGS = {
+  ...SMTP_SETTINGS,
+  imap_host: 'imap.example.com', imap_port: 993, imap_secure: true,
+  imap_user: 'noreply@example.com', imap_pass: 'secret',
+};
+
 function fakeTransport(info = { messageId: '<fake@local>' }) {
   return {
     sent: [],
@@ -90,4 +96,65 @@ test('createTransport 启用连接池与超时', () => {
   assert.strictEqual(trans.options.greetingTimeout, 10000);
   assert.strictEqual(trans.options.socketTimeout, 60000);
   trans.close();
+});
+
+test('isImapConfigured 在 IMAP 信息齐全时返回 true', () => {
+  const { isImapConfigured } = require('../mailer');
+  assert.strictEqual(isImapConfigured(IMAP_SETTINGS), true);
+  assert.strictEqual(isImapConfigured({}), false);
+  assert.strictEqual(isImapConfigured({ imap_host: 'x', imap_user: 'y' }), false);
+});
+
+test('detectSentBox 从邮箱列表中识别常见 Sent 文件夹', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: 'INBOX' },
+      { path: 'Sent Items' },
+      { path: 'Drafts' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), 'Sent Items');
+});
+
+test('detectSentBox 支持中文 "已发送"', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: '收件箱' },
+      { path: '已发送' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), '已发送');
+});
+
+test('detectSentBox 找不到 Sent 文件夹时返回 null', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = { list: async () => [{ path: 'INBOX' }] };
+  assert.strictEqual(await detectSentBox(fakeClient), null);
+});
+
+test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存到已发送', async () => {
+  const { sendMail } = require('../mailer');
+  const transport = fakeTransport();
+  let appendCalled = false;
+  let appendArgs = null;
+
+  const result = await sendMail({
+    settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: [],
+    subject: '主题', body: '正文',
+    deps: {
+      appendSent: async (args) => {
+        appendCalled = true;
+        appendArgs = args;
+      },
+    },
+  });
+  assert.strictEqual(result.status, 'sent');
+  assert.strictEqual(appendCalled, true);
+  assert.strictEqual(appendArgs.settings, IMAP_SETTINGS);
+  assert.ok(Buffer.isBuffer(appendArgs.message));
+  const mime = appendArgs.message.toString('utf8');
+  assert.ok(mime.includes('Subject: 主题'));
+  assert.ok(mime.includes('To: a@b.com'));
 });
