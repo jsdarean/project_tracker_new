@@ -5,7 +5,10 @@ const { renderTemplate, generateToken, isSmtpConfigured, sendMail, appendSent, d
 
 let baseUrl;
 test.before(async () => { ({ baseUrl } = await setup()); });
-test.after(() => teardown());
+test.after(() => {
+  resetTransportCache();
+  teardown();
+});
 
 const SMTP_SETTINGS = {
   smtp_host: 'smtp.example.com', smtp_port: 465, smtp_secure: true,

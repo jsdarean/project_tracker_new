@@ -12,6 +12,7 @@ const issuesRouter = require('./routes/issues');
 const escalationRouter = require('./routes/escalation');
 const { startCron } = require('./escalation');
 const { loadSettings, saveSettings, EMAIL_DEFAULTS } = require('./settings-store');
+const { resetTransportCache } = require('./mailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1249,6 +1250,8 @@ app.get('/api/company-contacts/personnel', async (req, res) => {
 app.use(issuesRouter);
 app.use(escalationRouter);
 
+let server = null;
+
 async function start() {
   // 加载本地设置并应用数据库配置（覆盖环境变量默认值）
   try {
@@ -1270,10 +1273,26 @@ async function start() {
   // 邮件催办定时任务（cron 表达式非法时仅禁用对应任务，不影响启动）
   const cronSettings = await loadSettings();
   startCron(cronSettings);
-  app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`项目信息提取后端已启动: http://localhost:${PORT}`);
   });
 }
+
+function gracefulShutdown(signal) {
+  console.log(`收到 ${signal}，开始优雅关闭...`);
+  if (server) {
+    server.close(() => {
+      console.log('HTTP server 已关闭');
+    });
+  }
+  // 关闭 SMTP 连接池，避免进程退出时连接残留
+  resetTransportCache();
+  // 给剩余请求/日志一个缓冲时间
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // 直接运行时启动服务；被测试 require 时仅导出 app
 if (require.main === module) {

@@ -128,7 +128,7 @@ function smtpSettingsKey(settings) {
   const secure = settings.smtp_secure !== false && settings.smtp_secure !== 'false';
   return JSON.stringify({
     host: settings.smtp_host,
-    port: settings.smtp_port,
+    port: Number(settings.smtp_port) || 465,
     secure,
     user: settings.smtp_user,
   });
@@ -138,7 +138,8 @@ function getTransport(settings) {
   const key = smtpSettingsKey(settings);
   if (!cachedTransport || cachedSettingsKey !== key) {
     if (cachedTransport) {
-      Promise.resolve(cachedTransport.close()).catch(err => {
+      const oldTransport = cachedTransport;
+      Promise.resolve().then(() => oldTransport.close()).catch(err => {
         console.error('SMTP transport 关闭失败:', err.message);
       });
     }
@@ -150,7 +151,8 @@ function getTransport(settings) {
 
 function resetTransportCache() {
   if (cachedTransport) {
-    Promise.resolve(cachedTransport.close()).catch(err => {
+    const oldTransport = cachedTransport;
+    Promise.resolve().then(() => oldTransport.close()).catch(err => {
       console.error('SMTP transport 关闭失败:', err.message);
     });
     cachedTransport = null;
