@@ -114,6 +114,39 @@ function createTransport(settings) {
   });
 }
 
+let cachedTransport = null;
+let cachedSettingsKey = null;
+
+function smtpSettingsKey(settings) {
+  return JSON.stringify({
+    host: settings.smtp_host,
+    port: settings.smtp_port,
+    secure: settings.smtp_secure,
+    user: settings.smtp_user,
+    pass: settings.smtp_pass,
+  });
+}
+
+function getTransport(settings) {
+  const key = smtpSettingsKey(settings);
+  if (!cachedTransport || cachedSettingsKey !== key) {
+    if (cachedTransport) {
+      cachedTransport.close();
+    }
+    cachedTransport = createTransport(settings);
+    cachedSettingsKey = key;
+  }
+  return cachedTransport;
+}
+
+function resetTransportCache() {
+  if (cachedTransport) {
+    cachedTransport.close();
+    cachedTransport = null;
+    cachedSettingsKey = null;
+  }
+}
+
 // 发送并写日志。transport 可注入（测试用假 transport）；token 由调用方生成（渲染 ack_url 需要先拿到）。
 async function sendMail({ settings, transport, to, cc, subject, body, issueId, ruleId, token, deps = {} }) {
   const appendSentFn = (deps && deps.appendSent) || appendSent;
@@ -130,7 +163,7 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
     return { logId: result.insertId, status: 'skipped' };
   }
 
-  const trans = transport || createTransport(settings);
+  const trans = transport || getTransport(settings);
   let info;
   try {
     info = await trans.sendMail({
@@ -166,12 +199,13 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
        toList.join(','), ccList.join(','), subject, body]
     );
     const sentResult = { logId: result.insertId, status: 'sent', messageId: info.messageId };
-    // 异步保存到 IMAP 已发送，不阻塞响应
+    // 异步保存到 IMAP 已发送，不阻塞响应；MIME 构建失败也不得影响 sent 结果
     if (isImapConfigured(settings)) {
-      const raw = await buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId });
-      appendSentFn({ settings, message: raw }).catch(err => {
-        console.error('保存到 IMAP 已发送失败:', err.message);
-      });
+      buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId })
+        .then(raw => appendSentFn({ settings, message: raw }))
+        .catch(err => {
+          console.error('保存到 IMAP 已发送失败:', err.message);
+        });
     }
     return sentResult;
   } catch (logErr) {
@@ -182,5 +216,5 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
 
 module.exports = {
   renderTemplate, generateToken, isSmtpConfigured, isImapConfigured,
-  createTransport, detectSentBox, appendSent, sendMail,
+  createTransport, getTransport, resetTransportCache, detectSentBox, appendSent, sendMail,
 };

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { setup, teardown, db } = require('./helpers').createTestContext('project_tracker_test_mailer');
-const { renderTemplate, generateToken, isSmtpConfigured, sendMail, appendSent, detectSentBox } = require('../mailer');
+const { renderTemplate, generateToken, isSmtpConfigured, sendMail, appendSent, detectSentBox, getTransport, resetTransportCache } = require('../mailer');
 
 let baseUrl;
 test.before(async () => { ({ baseUrl } = await setup()); });
@@ -87,15 +87,34 @@ test('发送异常 → 写 failed 日志（error_msg 截断）', async () => {
   assert.ok(rows[0].error_msg.length <= 500);
 });
 
-test('createTransport 启用连接池与超时', () => {
+test('createTransport 启用连接池与超时、限流', () => {
   const { createTransport } = require('../mailer');
   const trans = createTransport(SMTP_SETTINGS);
   assert.strictEqual(trans.options.pool, true);
   assert.strictEqual(trans.options.maxConnections, 3);
+  assert.strictEqual(trans.options.maxMessages, 100);
+  assert.strictEqual(trans.options.rateDelta, 1000);
+  assert.strictEqual(trans.options.rateLimit, 5);
   assert.strictEqual(trans.options.connectionTimeout, 10000);
   assert.strictEqual(trans.options.greetingTimeout, 10000);
   assert.strictEqual(trans.options.socketTimeout, 60000);
   trans.close();
+});
+
+test('getTransport 对相同 settings 复用同一 transport，切换配置时重建', () => {
+  const { getTransport, resetTransportCache } = require('../mailer');
+  resetTransportCache();
+  const t1 = getTransport(SMTP_SETTINGS);
+  const t2 = getTransport(SMTP_SETTINGS);
+  assert.strictEqual(t1, t2, '相同 settings 应返回缓存的 transport');
+
+  const otherSettings = { ...SMTP_SETTINGS, smtp_pass: 'different' };
+  const t3 = getTransport(otherSettings);
+  assert.notStrictEqual(t3, t1, '不同 settings 应重建 transport');
+
+  t1.close();
+  t3.close();
+  resetTransportCache();
 });
 
 test('isImapConfigured 在 IMAP 信息齐全时返回 true', () => {
@@ -169,6 +188,8 @@ test('IMAP append 失败不影响 sendMail 返回 sent', async () => {
   const { sendMail } = require('../mailer');
   const transport = fakeTransport();
   let appendCalled = false;
+  let appendResolve;
+  const appendPromise = new Promise(r => { appendResolve = r; });
 
   const result = await sendMail({
     settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: [],
@@ -176,13 +197,13 @@ test('IMAP append 失败不影响 sendMail 返回 sent', async () => {
     deps: {
       appendSent: async () => {
         appendCalled = true;
+        appendResolve();
         throw new Error('IMAP append 失败');
       },
     },
   });
-  // 让异步的 appendSent  rejection 走完 microtask
-  await new Promise(resolve => setImmediate(resolve));
   assert.strictEqual(result.status, 'sent');
+  await appendPromise;
   assert.strictEqual(appendCalled, true);
 });
 
@@ -207,6 +228,8 @@ test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存
   const transport = fakeTransport();
   let appendCalled = false;
   let appendArgs = null;
+  let appendResolve;
+  const appendPromise = new Promise(r => { appendResolve = r; });
 
   const result = await sendMail({
     settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: ['c@d.com'],
@@ -215,17 +238,21 @@ test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存
       appendSent: async (args) => {
         appendCalled = true;
         appendArgs = args;
+        appendResolve();
       },
     },
   });
   assert.strictEqual(result.status, 'sent');
+  await appendPromise;
   assert.strictEqual(appendCalled, true);
   assert.strictEqual(appendArgs.settings, IMAP_SETTINGS);
   assert.ok(Buffer.isBuffer(appendArgs.message));
   const mime = appendArgs.message.toString('utf8');
-  // nodemailer 对非 ASCII Subject 使用 encoded-word，检查原始头和 Cc
+  // nodemailer 对非 ASCII Subject 使用 encoded-word，检查原始头、Cc、正文与 Message-ID
   assert.ok(mime.includes('Subject:'));
   assert.ok(/=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=/u.test(mime));
   assert.ok(mime.includes('To: a@b.com'));
   assert.ok(mime.includes('Cc: c@d.com'));
+  assert.ok(mime.includes('Message-ID: <fake@local>'));
+  assert.ok(mime.includes(Buffer.from('正文').toString('base64')));
 });
