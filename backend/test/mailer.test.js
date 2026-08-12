@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { setup, teardown, db } = require('./helpers').createTestContext('project_tracker_test_mailer');
-const { renderTemplate, generateToken, isSmtpConfigured, sendMail } = require('../mailer');
+const { renderTemplate, generateToken, isSmtpConfigured, sendMail, appendSent, detectSentBox } = require('../mailer');
 
 let baseUrl;
 test.before(async () => { ({ baseUrl } = await setup()); });
@@ -134,6 +134,37 @@ test('detectSentBox 找不到 Sent 文件夹时返回 null', async () => {
   assert.strictEqual(await detectSentBox(fakeClient), null);
 });
 
+test('detectSentBox 兼容 IMAP 命名空间前缀', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: 'INBOX' },
+      { path: 'INBOX.Sent Items' },
+      { path: 'INBOX.Drafts' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), 'INBOX.Sent Items');
+});
+
+test('detectSentBox 兼容路径分隔符后缀匹配', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: 'INBOX' },
+      { path: '~/已发送' },
+      { path: '~/Drafts' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), '~/已发送');
+});
+
+test('appendSent 在 IMAP 未配置时直接返回，不抛错', async () => {
+  const { appendSent } = require('../mailer');
+  await assert.doesNotReject(async () => {
+    await appendSent({ settings: SMTP_SETTINGS, message: Buffer.from('test') });
+  });
+});
+
 test('IMAP append 失败不影响 sendMail 返回 sent', async () => {
   const { sendMail } = require('../mailer');
   const transport = fakeTransport();
@@ -178,8 +209,8 @@ test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存
   let appendArgs = null;
 
   const result = await sendMail({
-    settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: [],
-    subject: '主题', body: '正文',
+    settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: ['c@d.com'],
+    subject: '项目跟踪', body: '正文',
     deps: {
       appendSent: async (args) => {
         appendCalled = true;
@@ -192,6 +223,9 @@ test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存
   assert.strictEqual(appendArgs.settings, IMAP_SETTINGS);
   assert.ok(Buffer.isBuffer(appendArgs.message));
   const mime = appendArgs.message.toString('utf8');
-  assert.ok(mime.includes('Subject: 主题'));
+  // nodemailer 对非 ASCII Subject 使用 encoded-word，检查原始头和 Cc
+  assert.ok(mime.includes('Subject:'));
+  assert.ok(/=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=/u.test(mime));
   assert.ok(mime.includes('To: a@b.com'));
+  assert.ok(mime.includes('Cc: c@d.com'));
 });

@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const MailComposer = require('nodemailer/lib/mail-composer');
 const crypto = require('crypto');
 const { ImapFlow } = require('imapflow');
 const { query } = require('./db');
@@ -33,13 +34,29 @@ function normalizeBoxName(name) {
 async function detectSentBox(client) {
   const mailboxes = await client.list();
   const normalizedCandidates = SENT_BOX_CANDIDATES.map(normalizeBoxName);
+
+  // 1. 优先精确匹配完整路径
   for (const candidate of normalizedCandidates) {
     const found = mailboxes.find(mb => normalizeBoxName(mb.path) === candidate);
     if (found) return found.path;
   }
+
+  // 2. 再按层级分隔符取最后一段匹配（兼容 INBOX.Sent、~/Sent 等命名空间前缀）
+  for (const candidate of normalizedCandidates) {
+    const found = mailboxes.find(mb => {
+      const parts = String(mb.path || '').split(/[.\\/]/).filter(Boolean);
+      const lastPart = parts[parts.length - 1] || '';
+      return normalizeBoxName(lastPart) === candidate;
+    });
+    if (found) return found.path;
+  }
+
   return null;
 }
 
+// 每封成功邮件独立建立 IMAP 连接并 append。
+// 当前设计为 fire-and-forget，避免在批量/并发场景下管理长连接的生命周期。
+// 若后续每日邮件量显著增大，可在此引入连接池或按批次复用。
 async function appendSent({ settings, message }) {
   if (!isImapConfigured(settings)) return;
 
@@ -68,23 +85,16 @@ async function appendSent({ settings, message }) {
   }
 }
 
-function buildSentMime({ from, to, cc, subject, body, messageId }) {
-  const date = new Date().toUTCString();
-  const toHeader = Array.isArray(to) ? to.join(', ') : to;
-  const ccHeader = Array.isArray(cc) && cc.length > 0 ? cc.join(', ') : '';
-  const headers = [
-    `From: ${from}`,
-    `To: ${toHeader}`,
-    ccHeader ? `Cc: ${ccHeader}` : '',
-    `Subject: ${subject}`,
-    messageId ? `Message-ID: ${messageId}` : '',
-    `Date: ${date}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
-    '',
-    body,
-  ].filter(Boolean).join('\r\n');
-  return Buffer.from(headers, 'utf8');
+async function buildSentMime({ from, to, cc, subject, body, messageId }) {
+  const composer = new MailComposer({
+    from,
+    to,
+    cc: Array.isArray(cc) && cc.length > 0 ? cc : undefined,
+    subject,
+    text: body,
+    messageId,
+  });
+  return composer.compile().build();
 }
 
 function createTransport(settings) {
@@ -158,7 +168,7 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
     const sentResult = { logId: result.insertId, status: 'sent', messageId: info.messageId };
     // 异步保存到 IMAP 已发送，不阻塞响应
     if (isImapConfigured(settings)) {
-      const raw = buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId });
+      const raw = await buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId });
       appendSentFn({ settings, message: raw }).catch(err => {
         console.error('保存到 IMAP 已发送失败:', err.message);
       });
