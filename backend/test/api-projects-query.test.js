@@ -79,6 +79,16 @@ test('旧筛选：status 保存状态过滤仍工作', async () => {
   assert.strictEqual(bodySaved.total, 0);
 });
 
+test('GET /api/projects/columns 返回简化后的项目状态与健康度注释', async () => {
+  const resp = await fetch(`${baseUrl}/api/projects/columns`);
+  assert.strictEqual(resp.status, 200);
+  const result = await resp.json();
+  assert.strictEqual(result.success, true);
+  const byField = Object.fromEntries(result.data.map(c => [c.field, c.comment]));
+  assert.strictEqual(byField.project_status, '项目状态');
+  assert.strictEqual(byField.health_status, '健康度');
+});
+
 // 保持在本文件最后：该用例额外插入一行，避免影响前面对 total 的断言
 test('GET /api/projects/:id 返回 4 个新字段；不存在返回 404', async () => {
   await db.query(`INSERT INTO projects (project_name, project_status, health_status) VALUES ('详情项目', '已暂停', '关注')`);
