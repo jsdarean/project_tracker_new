@@ -10,7 +10,7 @@ let exportFields = [];
 // 当前排序（字段白名单与后端一致）
 let currentSort = '';
 let currentOrder = 'asc';
-const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'last_progress_date']);
+const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'planned_start_date', 'planned_end_date', 'last_progress_date']);
 
 // 列表默认展示的字段（顺序），_select / _action 为非数据库字段
 const displayColumns = [
