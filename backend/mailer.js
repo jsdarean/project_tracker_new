@@ -60,7 +60,11 @@ async function appendSent({ settings, message }) {
     }
     await client.append(sentBox, message, { flags: ['\\Seen'] });
   } finally {
-    await client.logout();
+    try {
+      await client.logout();
+    } catch (logoutErr) {
+      console.error('IMAP logout 失败:', logoutErr.message);
+    }
   }
 }
 

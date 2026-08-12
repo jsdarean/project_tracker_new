@@ -134,6 +134,43 @@ test('detectSentBox 找不到 Sent 文件夹时返回 null', async () => {
   assert.strictEqual(await detectSentBox(fakeClient), null);
 });
 
+test('IMAP append 失败不影响 sendMail 返回 sent', async () => {
+  const { sendMail } = require('../mailer');
+  const transport = fakeTransport();
+  let appendCalled = false;
+
+  const result = await sendMail({
+    settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: [],
+    subject: '主题', body: '正文',
+    deps: {
+      appendSent: async () => {
+        appendCalled = true;
+        throw new Error('IMAP append 失败');
+      },
+    },
+  });
+  // 让异步的 appendSent  rejection 走完 microtask
+  await new Promise(resolve => setImmediate(resolve));
+  assert.strictEqual(result.status, 'sent');
+  assert.strictEqual(appendCalled, true);
+});
+
+test('仅 SMTP 配置时不会调用 appendSent', async () => {
+  const { sendMail } = require('../mailer');
+  const transport = fakeTransport();
+  let appendCalled = false;
+
+  const result = await sendMail({
+    settings: SMTP_SETTINGS, transport, to: ['a@b.com'], cc: [],
+    subject: '主题', body: '正文',
+    deps: {
+      appendSent: async () => { appendCalled = true; },
+    },
+  });
+  assert.strictEqual(result.status, 'sent');
+  assert.strictEqual(appendCalled, false);
+});
+
 test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存到已发送', async () => {
   const { sendMail } = require('../mailer');
   const transport = fakeTransport();
