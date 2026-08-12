@@ -80,3 +80,14 @@ test('发送异常 → 写 failed 日志（error_msg 截断）', async () => {
   assert.ok(rows[0].error_msg.includes('Connection refused'));
   assert.ok(rows[0].error_msg.length <= 500);
 });
+
+test('createTransport 启用连接池与超时', () => {
+  const { createTransport } = require('../mailer');
+  const trans = createTransport(SMTP_SETTINGS);
+  assert.strictEqual(trans.options.pool, true);
+  assert.strictEqual(trans.options.maxConnections, 3);
+  assert.strictEqual(trans.options.connectionTimeout, 10000);
+  assert.strictEqual(trans.options.greetingTimeout, 10000);
+  assert.strictEqual(trans.options.socketTimeout, 60000);
+  trans.close();
+});

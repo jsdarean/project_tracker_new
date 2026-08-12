@@ -25,6 +25,14 @@ function createTransport(settings) {
     port: Number(settings.smtp_port) || 465,
     secure: settings.smtp_secure !== false && settings.smtp_secure !== 'false',
     auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    rateDelta: 1000,
+    rateLimit: 5,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 60000,
   });
 }
 
@@ -85,4 +93,4 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
   }
 }
 
-module.exports = { renderTemplate, generateToken, isSmtpConfigured, sendMail };
+module.exports = { renderTemplate, generateToken, isSmtpConfigured, sendMail, createTransport };
