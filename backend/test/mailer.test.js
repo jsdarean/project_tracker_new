@@ -108,12 +108,40 @@ test('getTransport 对相同 settings 复用同一 transport，切换配置时�
   const t2 = getTransport(SMTP_SETTINGS);
   assert.strictEqual(t1, t2, '相同 settings 应返回缓存的 transport');
 
-  const otherSettings = { ...SMTP_SETTINGS, smtp_pass: 'different' };
+  const otherSettings = { ...SMTP_SETTINGS, smtp_host: 'smtp2.example.com' };
   const t3 = getTransport(otherSettings);
   assert.notStrictEqual(t3, t1, '不同 settings 应重建 transport');
 
   t1.close();
   t3.close();
+  resetTransportCache();
+});
+
+test('sendMail 使用缓存 transport 失败时会重置缓存并重建', async () => {
+  const { sendMail, getTransport, resetTransportCache } = require('../mailer');
+  resetTransportCache();
+
+  // 先预热缓存
+  const t1 = getTransport(SMTP_SETTINGS);
+
+  const failingTransport = {
+    async sendMail() { throw new Error('SMTP failed'); },
+    close() {},
+  };
+
+  const result = await sendMail({
+    settings: SMTP_SETTINGS, to: ['a@b.com'], cc: [],
+    subject: 's', body: 'b',
+    deps: { getTransport: () => failingTransport },
+  });
+  assert.strictEqual(result.status, 'failed');
+
+  // 失败后缓存应被重置，再次 getTransport 会创建新的 transport
+  const t2 = getTransport(SMTP_SETTINGS);
+  assert.notStrictEqual(t2, t1, '失败后应重置缓存并重建 transport');
+
+  t1.close();
+  t2.close();
   resetTransportCache();
 });
 

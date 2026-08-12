@@ -54,8 +54,8 @@ async function detectSentBox(client) {
   return null;
 }
 
-// 每封成功邮件独立建立 IMAP 连接并 append。
-// 当前设计为 fire-and-forget，避免在批量/并发场景下管理长连接的生命周期。
+// 每封成功邮件在后台独立建立 IMAP 连接并 append；sendMail 调用方 fire-forget 整个链路。
+// 当前设计避免在批量/并发场景下管理长连接的生命周期。
 // 若后续每日邮件量显著增大，可在此引入连接池或按批次复用。
 async function appendSent({ settings, message }) {
   if (!isImapConfigured(settings)) return;
@@ -66,6 +66,9 @@ async function appendSent({ settings, message }) {
     secure: settings.imap_secure !== false && settings.imap_secure !== 'false',
     auth: { user: settings.imap_user, pass: settings.imap_pass },
     logger: false,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
   });
 
   try {
@@ -97,6 +100,7 @@ async function buildSentMime({ from, to, cc, subject, body, messageId }) {
   return composer.compile().build();
 }
 
+// 低层工厂：测试或特殊场景可直接调用。生产代码请通过 getTransport() 复用进程级连接池。
 function createTransport(settings) {
   return nodemailer.createTransport({
     host: settings.smtp_host,
@@ -118,12 +122,12 @@ let cachedTransport = null;
 let cachedSettingsKey = null;
 
 function smtpSettingsKey(settings) {
+  // 缓存 key 不包含密码，避免凭据在内存中额外序列化；修改密码后旧连接仍会被关闭并重建
   return JSON.stringify({
     host: settings.smtp_host,
     port: settings.smtp_port,
     secure: settings.smtp_secure,
     user: settings.smtp_user,
-    pass: settings.smtp_pass,
   });
 }
 
@@ -150,6 +154,7 @@ function resetTransportCache() {
 // 发送并写日志。transport 可注入（测试用假 transport）；token 由调用方生成（渲染 ack_url 需要先拿到）。
 async function sendMail({ settings, transport, to, cc, subject, body, issueId, ruleId, token, deps = {} }) {
   const appendSentFn = (deps && deps.appendSent) || appendSent;
+  const getTransportFn = (deps && deps.getTransport) || getTransport;
   const toList = [...new Set((Array.isArray(to) ? to : [to]).filter(Boolean))];
   const ccList = [...new Set((Array.isArray(cc) ? cc : [cc]).filter(Boolean))];
 
@@ -163,7 +168,7 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
     return { logId: result.insertId, status: 'skipped' };
   }
 
-  const trans = transport || getTransport(settings);
+  const trans = transport || getTransportFn(settings);
   let info;
   try {
     info = await trans.sendMail({
@@ -175,6 +180,10 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
     });
   } catch (err) {
     const errorMsg = String((err && err.message) || err).slice(0, 500);
+    if (!transport) {
+      // 使用缓存 transport 发送失败时清掉缓存，避免死连接长期占用
+      resetTransportCache();
+    }
     let logId = null;
     try {
       const result = await query(
