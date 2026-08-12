@@ -1,5 +1,7 @@
 const nodemailer = require('nodemailer');
+const MailComposer = require('nodemailer/lib/mail-composer');
 const crypto = require('crypto');
+const { ImapFlow } = require('imapflow');
 const { query } = require('./db');
 
 // 模板占位符替换：{{var}} 有值则替换，未知/空值原样保留
@@ -19,17 +21,165 @@ function isSmtpConfigured(settings) {
   return !!(settings && settings.smtp_host && settings.smtp_user && settings.smtp_pass);
 }
 
+function isImapConfigured(settings) {
+  return !!(settings && settings.imap_host && settings.imap_user && settings.imap_pass);
+}
+
+const SENT_BOX_CANDIDATES = ['Sent Items', 'Sent', '已发送', 'Sent Messages', '已发送邮件'];
+
+function normalizeBoxName(name) {
+  return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+async function detectSentBox(client) {
+  const mailboxes = await client.list();
+  const normalizedCandidates = SENT_BOX_CANDIDATES.map(normalizeBoxName);
+
+  // 1. 优先精确匹配完整路径
+  for (const candidate of normalizedCandidates) {
+    const found = mailboxes.find(mb => normalizeBoxName(mb.path) === candidate);
+    if (found) return found.path;
+  }
+
+  // 2. 再按层级分隔符取最后一段匹配（兼容 INBOX.Sent、~/Sent 等命名空间前缀）
+  for (const candidate of normalizedCandidates) {
+    const found = mailboxes.find(mb => {
+      const parts = String(mb.path || '').split(/[.\\/]/).filter(Boolean);
+      const lastPart = parts[parts.length - 1] || '';
+      return normalizeBoxName(lastPart) === candidate;
+    });
+    if (found) return found.path;
+  }
+
+  return null;
+}
+
+// 每封成功邮件在后台独立建立 IMAP 连接并 append；sendMail 调用方 fire-forget 整个链路。
+// 当前设计避免在批量/并发场景下管理长连接的生命周期。
+// 若后续每日邮件量显著增大，可在此引入连接池或按批次复用。
+async function appendSent({ settings, message, date, client: injectedClient }) {
+  if (!isImapConfigured(settings)) return;
+
+  const client = injectedClient || new ImapFlow({
+    host: settings.imap_host,
+    port: Number(settings.imap_port) || 993,
+    secure: settings.imap_secure !== false && settings.imap_secure !== 'false',
+    auth: { user: settings.imap_user, pass: settings.imap_pass },
+    logger: false,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
+  });
+
+  try {
+    await client.connect();
+    const sentBox = await detectSentBox(client);
+    if (!sentBox) {
+      console.warn('IMAP 已发送保存跳过：未找到 Sent 文件夹');
+      return;
+    }
+    await client.append(sentBox, message, { flags: ['\\Seen'], internaldate: date || new Date() });
+  } finally {
+    try {
+      await client.logout();
+    } catch (logoutErr) {
+      console.error('IMAP logout 失败:', logoutErr.message);
+    }
+  }
+}
+
+function formatBeijingDate(date) {
+  const beijingOffset = 8 * 60 * 60 * 1000;
+  const beijingTime = new Date(date.getTime() + beijingOffset);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = days[beijingTime.getUTCDay()];
+  const dd = String(beijingTime.getUTCDate()).padStart(2, '0');
+  const month = months[beijingTime.getUTCMonth()];
+  const year = beijingTime.getUTCFullYear();
+  const time = beijingTime.toISOString().slice(11, 19);
+  return `${day}, ${dd} ${month} ${year} ${time} +0800`;
+}
+
+async function buildSentMime({ from, to, cc, subject, body, messageId, date }) {
+  const composer = new MailComposer({
+    from,
+    to,
+    cc: Array.isArray(cc) && cc.length > 0 ? cc : undefined,
+    subject,
+    text: body,
+    messageId,
+    headers: {
+      // IMAP 已发送邮件时间统一按北京时区（UTC+8）写入 Date 头
+      Date: formatBeijingDate(date || new Date()),
+    },
+  });
+  return composer.compile().build();
+}
+
+// 低层工厂：测试或特殊场景可直接调用。生产代码请通过 getTransport() 复用进程级连接池。
 function createTransport(settings) {
   return nodemailer.createTransport({
     host: settings.smtp_host,
     port: Number(settings.smtp_port) || 465,
     secure: settings.smtp_secure !== false && settings.smtp_secure !== 'false',
     auth: { user: settings.smtp_user, pass: settings.smtp_pass },
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    rateDelta: 1000,
+    rateLimit: 5,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 60000,
   });
 }
 
+let cachedTransport = null;
+let cachedSettingsKey = null;
+
+function smtpSettingsKey(settings) {
+  // 缓存 key 不包含密码，避免凭据在内存中额外序列化；
+  // 修改密码后不会立即重建，需等待发送失败触发 resetTransportCache 或进程重启。
+  const secure = settings.smtp_secure !== false && settings.smtp_secure !== 'false';
+  return JSON.stringify({
+    host: settings.smtp_host,
+    port: Number(settings.smtp_port) || 465,
+    secure,
+    user: settings.smtp_user,
+  });
+}
+
+function getTransport(settings) {
+  const key = smtpSettingsKey(settings);
+  if (!cachedTransport || cachedSettingsKey !== key) {
+    if (cachedTransport) {
+      const oldTransport = cachedTransport;
+      Promise.resolve().then(() => oldTransport.close()).catch(err => {
+        console.error('SMTP transport 关闭失败:', err.message);
+      });
+    }
+    cachedTransport = createTransport(settings);
+    cachedSettingsKey = key;
+  }
+  return cachedTransport;
+}
+
+function resetTransportCache() {
+  if (cachedTransport) {
+    const oldTransport = cachedTransport;
+    Promise.resolve().then(() => oldTransport.close()).catch(err => {
+      console.error('SMTP transport 关闭失败:', err.message);
+    });
+    cachedTransport = null;
+    cachedSettingsKey = null;
+  }
+}
+
 // 发送并写日志。transport 可注入（测试用假 transport）；token 由调用方生成（渲染 ack_url 需要先拿到）。
-async function sendMail({ settings, transport, to, cc, subject, body, issueId, ruleId, token }) {
+async function sendMail({ settings, transport, to, cc, subject, body, issueId, ruleId, token, deps = {} }) {
+  const appendSentFn = (deps && deps.appendSent) || appendSent;
+  const getTransportFn = (deps && deps.getTransport) || getTransport;
   const toList = [...new Set((Array.isArray(to) ? to : [to]).filter(Boolean))];
   const ccList = [...new Set((Array.isArray(cc) ? cc : [cc]).filter(Boolean))];
 
@@ -43,7 +193,7 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
     return { logId: result.insertId, status: 'skipped' };
   }
 
-  const trans = transport || createTransport(settings);
+  const trans = transport || getTransportFn(settings);
   let info;
   try {
     info = await trans.sendMail({
@@ -55,6 +205,11 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
     });
   } catch (err) {
     const errorMsg = String((err && err.message) || err).slice(0, 500);
+    if (!transport) {
+      // 使用缓存 transport 发送失败时清掉缓存，避免死连接长期占用。
+      // 当前为简单策略：任何失败都重置；并发发送时可能相互影响，若并发量高可进一步按错误类型区分。
+      resetTransportCache();
+    }
     let logId = null;
     try {
       const result = await query(
@@ -78,11 +233,24 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
       [issueId || null, ruleId || null, info.messageId || null, token || null,
        toList.join(','), ccList.join(','), subject, body]
     );
-    return { logId: result.insertId, status: 'sent', messageId: info.messageId };
+    const sentResult = { logId: result.insertId, status: 'sent', messageId: info.messageId };
+    const sentAt = new Date();
+    // 异步保存到 IMAP 已发送，不阻塞响应；MIME 构建失败也不得影响 sent 结果
+    if (isImapConfigured(settings)) {
+      buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId, date: sentAt })
+        .then(raw => appendSentFn({ settings, message: raw, date: sentAt }))
+        .catch(err => {
+          console.error('保存到 IMAP 已发送失败:', err.message);
+        });
+    }
+    return sentResult;
   } catch (logErr) {
     console.error('发送日志写入失败（邮件已发送）:', logErr.message);
     return { logId: null, status: 'sent', messageId: info.messageId };
   }
 }
 
-module.exports = { renderTemplate, generateToken, isSmtpConfigured, sendMail };
+module.exports = {
+  renderTemplate, generateToken, isSmtpConfigured, isImapConfigured,
+  createTransport, getTransport, resetTransportCache, detectSentBox, appendSent, buildSentMime, sendMail,
+};

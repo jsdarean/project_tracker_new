@@ -1,15 +1,24 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { setup, teardown, db } = require('./helpers').createTestContext('project_tracker_test_mailer');
-const { renderTemplate, generateToken, isSmtpConfigured, sendMail } = require('../mailer');
+const { renderTemplate, generateToken, isSmtpConfigured, sendMail, appendSent, detectSentBox, getTransport, resetTransportCache } = require('../mailer');
 
 let baseUrl;
 test.before(async () => { ({ baseUrl } = await setup()); });
-test.after(() => teardown());
+test.after(async () => {
+  resetTransportCache();
+  await teardown();
+});
 
 const SMTP_SETTINGS = {
   smtp_host: 'smtp.example.com', smtp_port: 465, smtp_secure: true,
   smtp_user: 'noreply@example.com', smtp_pass: 'secret', mail_from: '项目跟踪 <noreply@example.com>',
+};
+
+const IMAP_SETTINGS = {
+  ...SMTP_SETTINGS,
+  imap_host: 'imap.example.com', imap_port: 993, imap_secure: true,
+  imap_user: 'noreply@example.com', imap_pass: 'secret',
 };
 
 function fakeTransport(info = { messageId: '<fake@local>' }) {
@@ -79,4 +88,242 @@ test('发送异常 → 写 failed 日志（error_msg 截断）', async () => {
   assert.strictEqual(rows[0].status, 'failed');
   assert.ok(rows[0].error_msg.includes('Connection refused'));
   assert.ok(rows[0].error_msg.length <= 500);
+});
+
+test('createTransport 启用连接池与超时、限流', () => {
+  const { createTransport } = require('../mailer');
+  const trans = createTransport(SMTP_SETTINGS);
+  assert.strictEqual(trans.options.pool, true);
+  assert.strictEqual(trans.options.maxConnections, 3);
+  assert.strictEqual(trans.options.maxMessages, 100);
+  assert.strictEqual(trans.options.rateDelta, 1000);
+  assert.strictEqual(trans.options.rateLimit, 5);
+  assert.strictEqual(trans.options.connectionTimeout, 10000);
+  assert.strictEqual(trans.options.greetingTimeout, 10000);
+  assert.strictEqual(trans.options.socketTimeout, 60000);
+  trans.close();
+});
+
+test('getTransport 对相同 settings 复用同一 transport，切换配置时重建', () => {
+  const { getTransport, resetTransportCache } = require('../mailer');
+  resetTransportCache();
+  const t1 = getTransport(SMTP_SETTINGS);
+  const t2 = getTransport(SMTP_SETTINGS);
+  assert.strictEqual(t1, t2, '相同 settings 应返回缓存的 transport');
+
+  const otherSettings = { ...SMTP_SETTINGS, smtp_host: 'smtp2.example.com' };
+  const t3 = getTransport(otherSettings);
+  assert.notStrictEqual(t3, t1, '不同 settings 应重建 transport');
+
+  t1.close();
+  t3.close();
+  resetTransportCache();
+});
+
+test('sendMail 使用缓存 transport 失败时会重置缓存并重建', async () => {
+  const { sendMail, getTransport, resetTransportCache } = require('../mailer');
+  resetTransportCache();
+
+  // 先预热缓存
+  const t1 = getTransport(SMTP_SETTINGS);
+
+  const failingTransport = {
+    async sendMail() { throw new Error('SMTP failed'); },
+    close() {},
+  };
+
+  const result = await sendMail({
+    settings: SMTP_SETTINGS, to: ['a@b.com'], cc: [],
+    subject: 's', body: 'b',
+    deps: { getTransport: () => failingTransport },
+  });
+  assert.strictEqual(result.status, 'failed');
+
+  // 失败后缓存应被重置，再次 getTransport 会创建新的 transport
+  const t2 = getTransport(SMTP_SETTINGS);
+  assert.notStrictEqual(t2, t1, '失败后应重置缓存并重建 transport');
+
+  t1.close();
+  t2.close();
+  resetTransportCache();
+});
+
+test('isImapConfigured 在 IMAP 信息齐全时返回 true', () => {
+  const { isImapConfigured } = require('../mailer');
+  assert.strictEqual(isImapConfigured(IMAP_SETTINGS), true);
+  assert.strictEqual(isImapConfigured({}), false);
+  assert.strictEqual(isImapConfigured({ imap_host: 'x', imap_user: 'y' }), false);
+});
+
+test('detectSentBox 从邮箱列表中识别常见 Sent 文件夹', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: 'INBOX' },
+      { path: 'Sent Items' },
+      { path: 'Drafts' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), 'Sent Items');
+});
+
+test('detectSentBox 支持中文 "已发送"', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: '收件箱' },
+      { path: '已发送' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), '已发送');
+});
+
+test('detectSentBox 找不到 Sent 文件夹时返回 null', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = { list: async () => [{ path: 'INBOX' }] };
+  assert.strictEqual(await detectSentBox(fakeClient), null);
+});
+
+test('detectSentBox 兼容 IMAP 命名空间前缀', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: 'INBOX' },
+      { path: 'INBOX.Sent Items' },
+      { path: 'INBOX.Drafts' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), 'INBOX.Sent Items');
+});
+
+test('detectSentBox 兼容路径分隔符后缀匹配', async () => {
+  const { detectSentBox } = require('../mailer');
+  const fakeClient = {
+    list: async () => [
+      { path: 'INBOX' },
+      { path: '~/已发送' },
+      { path: '~/Drafts' },
+    ],
+  };
+  assert.strictEqual(await detectSentBox(fakeClient), '~/已发送');
+});
+
+test('appendSent 在 IMAP 未配置时直接返回，不抛错', async () => {
+  const { appendSent } = require('../mailer');
+  await assert.doesNotReject(async () => {
+    await appendSent({ settings: SMTP_SETTINGS, message: Buffer.from('test') });
+  });
+});
+
+test('appendSent 按 connect → list → append → logout 顺序与 IMAP 交互', async () => {
+  const { appendSent } = require('../mailer');
+  const calls = [];
+  const fixedDate = new Date('2026-08-12T08:00:00.000Z');
+  const fakeClient = {
+    async connect() { calls.push('connect'); },
+    async list() {
+      calls.push('list');
+      return [{ path: 'INBOX' }, { path: 'Sent Items' }];
+    },
+    async append(box, message, options) {
+      calls.push('append');
+      assert.strictEqual(box, 'Sent Items');
+      assert.ok(Buffer.isBuffer(message));
+      assert.deepStrictEqual(options.flags, ['\\Seen']);
+      assert.ok(options.internaldate instanceof Date);
+      assert.strictEqual(options.internaldate.getTime(), fixedDate.getTime());
+    },
+    async logout() { calls.push('logout'); },
+  };
+
+  await appendSent({
+    settings: IMAP_SETTINGS,
+    message: Buffer.from('MIME'),
+    date: fixedDate,
+    client: fakeClient,
+  });
+  assert.deepStrictEqual(calls, ['connect', 'list', 'append', 'logout']);
+});
+
+test('IMAP append 失败不影响 sendMail 返回 sent', async () => {
+  const { sendMail } = require('../mailer');
+  const transport = fakeTransport();
+  let appendCalled = false;
+  let appendResolve;
+  const appendPromise = new Promise(r => { appendResolve = r; });
+
+  const result = await sendMail({
+    settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: [],
+    subject: '主题', body: '正文',
+    deps: {
+      appendSent: async () => {
+        appendCalled = true;
+        appendResolve();
+        throw new Error('IMAP append 失败');
+      },
+    },
+  });
+  assert.strictEqual(result.status, 'sent');
+  await appendPromise;
+  assert.strictEqual(appendCalled, true);
+});
+
+test('仅 SMTP 配置时不会调用 appendSent', async () => {
+  const { sendMail } = require('../mailer');
+  const transport = fakeTransport();
+  let appendCalled = false;
+
+  const result = await sendMail({
+    settings: SMTP_SETTINGS, transport, to: ['a@b.com'], cc: [],
+    subject: '主题', body: '正文',
+    deps: {
+      appendSent: async () => { appendCalled = true; },
+    },
+  });
+  assert.strictEqual(result.status, 'sent');
+  assert.strictEqual(appendCalled, false);
+});
+
+test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存到已发送', async () => {
+  const { sendMail } = require('../mailer');
+  const transport = fakeTransport();
+  let appendCalled = false;
+  let appendArgs = null;
+  let appendResolve;
+  const appendPromise = new Promise(r => { appendResolve = r; });
+
+  const result = await sendMail({
+    settings: IMAP_SETTINGS, transport, to: ['a@b.com'], cc: ['c@d.com'],
+    subject: '项目跟踪', body: '正文',
+    deps: {
+      appendSent: async (args) => {
+        appendCalled = true;
+        appendArgs = args;
+        appendResolve();
+      },
+    },
+  });
+  assert.strictEqual(result.status, 'sent');
+  await appendPromise;
+  assert.strictEqual(appendCalled, true);
+  assert.strictEqual(appendArgs.settings, IMAP_SETTINGS);
+  assert.ok(Buffer.isBuffer(appendArgs.message));
+  const mime = appendArgs.message.toString('utf8');
+  // nodemailer 对非 ASCII Subject 使用 encoded-word，检查原始头、Cc、正文与 Message-ID
+  assert.ok(mime.includes('Subject:'));
+  assert.ok(/=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=/u.test(mime));
+  assert.ok(mime.includes('To: a@b.com'));
+  assert.ok(mime.includes('Cc: c@d.com'));
+  assert.ok(mime.includes('Message-ID: <fake@local>'));
+  assert.ok(mime.includes(Buffer.from('正文').toString('base64')));
+});
+
+test('buildSentMime 使用北京时区（+0800）生成 Date 头', async () => {
+  const { buildSentMime } = require('../mailer');
+  const fixed = new Date('2026-08-12T00:00:00.000Z');
+  const mime = (await buildSentMime({
+    from: 'a@b.com', to: ['a@b.com'], cc: [],
+    subject: 's', body: 'b', messageId: '<test@local>', date: fixed,
+  })).toString('utf8');
+  assert.ok(mime.includes('Date: Wed, 12 Aug 2026 08:00:00 +0800'));
 });
