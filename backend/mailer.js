@@ -88,6 +88,19 @@ async function appendSent({ settings, message, date, client: injectedClient }) {
   }
 }
 
+function formatBeijingDate(date) {
+  const beijingOffset = 8 * 60 * 60 * 1000;
+  const beijingTime = new Date(date.getTime() + beijingOffset);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = days[beijingTime.getUTCDay()];
+  const dd = String(beijingTime.getUTCDate()).padStart(2, '0');
+  const month = months[beijingTime.getUTCMonth()];
+  const year = beijingTime.getUTCFullYear();
+  const time = beijingTime.toISOString().slice(11, 19);
+  return `${day}, ${dd} ${month} ${year} ${time} +0800`;
+}
+
 async function buildSentMime({ from, to, cc, subject, body, messageId, date }) {
   const composer = new MailComposer({
     from,
@@ -96,7 +109,10 @@ async function buildSentMime({ from, to, cc, subject, body, messageId, date }) {
     subject,
     text: body,
     messageId,
-    date,
+    headers: {
+      // IMAP 已发送邮件时间统一按北京时区（UTC+8）写入 Date 头
+      Date: formatBeijingDate(date || new Date()),
+    },
   });
   return composer.compile().build();
 }
@@ -236,5 +252,5 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
 
 module.exports = {
   renderTemplate, generateToken, isSmtpConfigured, isImapConfigured,
-  createTransport, getTransport, resetTransportCache, detectSentBox, appendSent, sendMail,
+  createTransport, getTransport, resetTransportCache, detectSentBox, appendSent, buildSentMime, sendMail,
 };

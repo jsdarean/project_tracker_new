@@ -5,9 +5,9 @@ const { renderTemplate, generateToken, isSmtpConfigured, sendMail, appendSent, d
 
 let baseUrl;
 test.before(async () => { ({ baseUrl } = await setup()); });
-test.after(() => {
+test.after(async () => {
   resetTransportCache();
-  teardown();
+  await teardown();
 });
 
 const SMTP_SETTINGS = {
@@ -316,4 +316,14 @@ test('发送成功且 IMAP 已配置 → 通过 deps 注入验证会异步保存
   assert.ok(mime.includes('Cc: c@d.com'));
   assert.ok(mime.includes('Message-ID: <fake@local>'));
   assert.ok(mime.includes(Buffer.from('正文').toString('base64')));
+});
+
+test('buildSentMime 使用北京时区（+0800）生成 Date 头', async () => {
+  const { buildSentMime } = require('../mailer');
+  const fixed = new Date('2026-08-12T00:00:00.000Z');
+  const mime = (await buildSentMime({
+    from: 'a@b.com', to: ['a@b.com'], cc: [],
+    subject: 's', body: 'b', messageId: '<test@local>', date: fixed,
+  })).toString('utf8');
+  assert.ok(mime.includes('Date: Wed, 12 Aug 2026 08:00:00 +0800'));
 });
