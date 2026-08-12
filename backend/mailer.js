@@ -57,10 +57,10 @@ async function detectSentBox(client) {
 // 每封成功邮件在后台独立建立 IMAP 连接并 append；sendMail 调用方 fire-forget 整个链路。
 // 当前设计避免在批量/并发场景下管理长连接的生命周期。
 // 若后续每日邮件量显著增大，可在此引入连接池或按批次复用。
-async function appendSent({ settings, message }) {
+async function appendSent({ settings, message, date, client: injectedClient }) {
   if (!isImapConfigured(settings)) return;
 
-  const client = new ImapFlow({
+  const client = injectedClient || new ImapFlow({
     host: settings.imap_host,
     port: Number(settings.imap_port) || 993,
     secure: settings.imap_secure !== false && settings.imap_secure !== 'false',
@@ -78,7 +78,7 @@ async function appendSent({ settings, message }) {
       console.warn('IMAP 已发送保存跳过：未找到 Sent 文件夹');
       return;
     }
-    await client.append(sentBox, message, { flags: ['\\Seen'] });
+    await client.append(sentBox, message, { flags: ['\\Seen'], internaldate: date || new Date() });
   } finally {
     try {
       await client.logout();
@@ -88,7 +88,7 @@ async function appendSent({ settings, message }) {
   }
 }
 
-async function buildSentMime({ from, to, cc, subject, body, messageId }) {
+async function buildSentMime({ from, to, cc, subject, body, messageId, date }) {
   const composer = new MailComposer({
     from,
     to,
@@ -96,6 +96,7 @@ async function buildSentMime({ from, to, cc, subject, body, messageId }) {
     subject,
     text: body,
     messageId,
+    date,
   });
   return composer.compile().build();
 }
@@ -122,11 +123,13 @@ let cachedTransport = null;
 let cachedSettingsKey = null;
 
 function smtpSettingsKey(settings) {
-  // 缓存 key 不包含密码，避免凭据在内存中额外序列化；修改密码后旧连接仍会被关闭并重建
+  // 缓存 key 不包含密码，避免凭据在内存中额外序列化；
+  // 修改密码后不会立即重建，需等待发送失败触发 resetTransportCache 或进程重启。
+  const secure = settings.smtp_secure !== false && settings.smtp_secure !== 'false';
   return JSON.stringify({
     host: settings.smtp_host,
     port: settings.smtp_port,
-    secure: settings.smtp_secure,
+    secure,
     user: settings.smtp_user,
   });
 }
@@ -135,7 +138,9 @@ function getTransport(settings) {
   const key = smtpSettingsKey(settings);
   if (!cachedTransport || cachedSettingsKey !== key) {
     if (cachedTransport) {
-      cachedTransport.close();
+      Promise.resolve(cachedTransport.close()).catch(err => {
+        console.error('SMTP transport 关闭失败:', err.message);
+      });
     }
     cachedTransport = createTransport(settings);
     cachedSettingsKey = key;
@@ -145,7 +150,9 @@ function getTransport(settings) {
 
 function resetTransportCache() {
   if (cachedTransport) {
-    cachedTransport.close();
+    Promise.resolve(cachedTransport.close()).catch(err => {
+      console.error('SMTP transport 关闭失败:', err.message);
+    });
     cachedTransport = null;
     cachedSettingsKey = null;
   }
@@ -181,7 +188,8 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
   } catch (err) {
     const errorMsg = String((err && err.message) || err).slice(0, 500);
     if (!transport) {
-      // 使用缓存 transport 发送失败时清掉缓存，避免死连接长期占用
+      // 使用缓存 transport 发送失败时清掉缓存，避免死连接长期占用。
+      // 当前为简单策略：任何失败都重置；并发发送时可能相互影响，若并发量高可进一步按错误类型区分。
       resetTransportCache();
     }
     let logId = null;
@@ -208,10 +216,11 @@ async function sendMail({ settings, transport, to, cc, subject, body, issueId, r
        toList.join(','), ccList.join(','), subject, body]
     );
     const sentResult = { logId: result.insertId, status: 'sent', messageId: info.messageId };
+    const sentAt = new Date();
     // 异步保存到 IMAP 已发送，不阻塞响应；MIME 构建失败也不得影响 sent 结果
     if (isImapConfigured(settings)) {
-      buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId })
-        .then(raw => appendSentFn({ settings, message: raw }))
+      buildSentMime({ from: settings.mail_from || settings.smtp_user, to: toList, cc: ccList, subject, body, messageId: info.messageId, date: sentAt })
+        .then(raw => appendSentFn({ settings, message: raw, date: sentAt }))
         .catch(err => {
           console.error('保存到 IMAP 已发送失败:', err.message);
         });

@@ -212,6 +212,36 @@ test('appendSent 在 IMAP 未配置时直接返回，不抛错', async () => {
   });
 });
 
+test('appendSent 按 connect → list → append → logout 顺序与 IMAP 交互', async () => {
+  const { appendSent } = require('../mailer');
+  const calls = [];
+  const fixedDate = new Date('2026-08-12T08:00:00.000Z');
+  const fakeClient = {
+    async connect() { calls.push('connect'); },
+    async list() {
+      calls.push('list');
+      return [{ path: 'INBOX' }, { path: 'Sent Items' }];
+    },
+    async append(box, message, options) {
+      calls.push('append');
+      assert.strictEqual(box, 'Sent Items');
+      assert.ok(Buffer.isBuffer(message));
+      assert.deepStrictEqual(options.flags, ['\\Seen']);
+      assert.ok(options.internaldate instanceof Date);
+      assert.strictEqual(options.internaldate.getTime(), fixedDate.getTime());
+    },
+    async logout() { calls.push('logout'); },
+  };
+
+  await appendSent({
+    settings: IMAP_SETTINGS,
+    message: Buffer.from('MIME'),
+    date: fixedDate,
+    client: fakeClient,
+  });
+  assert.deepStrictEqual(calls, ['connect', 'list', 'append', 'logout']);
+});
+
 test('IMAP append 失败不影响 sendMail 返回 sent', async () => {
   const { sendMail } = require('../mailer');
   const transport = fakeTransport();
