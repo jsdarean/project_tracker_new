@@ -21,7 +21,7 @@ const defaultExportFields = projectColumns
     const m = def.match(/^`([^`]+)`/);
     return m ? m[1] : '';
   })
-  .filter(f => f && !['id', 'created_at', 'updated_at', 'status'].includes(f));
+  .filter(f => f && !['id', 'created_at', 'updated_at', 'status', 'planned_start_date', 'planned_end_date'].includes(f));
 
 async function loadSettings() {
   const dbCfg = getDbConfig();

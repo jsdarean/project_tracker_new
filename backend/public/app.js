@@ -10,7 +10,7 @@ let exportFields = [];
 // 当前排序（字段白名单与后端一致）
 let currentSort = '';
 let currentOrder = 'asc';
-const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'planned_start_date', 'planned_end_date', 'last_progress_date']);
+const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'last_progress_date']);
 
 // 列表默认展示的字段（顺序），_select / _action 为非数据库字段
 const displayColumns = [
@@ -20,8 +20,6 @@ const displayColumns = [
   'project_code',
   'project_name',
   'approval_date',
-  'planned_start_date',
-  'planned_end_date',
   'project_status',
   'health_status',
   'last_progress_date',
@@ -254,10 +252,6 @@ function renderCell(field, row) {
       return `<td title="${escapeHtml(row.project_name || '')}"><a href="detail.html?id=${row.id}">${escapeHtml(truncate(row.project_name, 40))}</a></td>`;
     case 'approval_date':
       return `<td>${formatDate(row.approval_date)}</td>`;
-    case 'planned_start_date':
-      return `<td>${formatDate(row.planned_start_date)}</td>`;
-    case 'planned_end_date':
-      return `<td>${formatDate(row.planned_end_date)}</td>`;
     case 'project_status':
       return `<td>${row.project_status ? `<span class="badge badge-status-${statusClass(row.project_status)}">${escapeHtml(row.project_status)}</span>` : ''}</td>`;
     case 'health_status':
