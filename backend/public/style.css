@@ -1209,6 +1209,9 @@ th.sortable:hover {
 .issue-overdue-row { background: rgba(234, 34, 97, 0.05); }
 .overdue-text { color: var(--ruby); font-size: 12px; font-weight: 500; }
 
+/* 已关闭问题 */
+.issue-closed-text { text-decoration: line-through; color: var(--ink-mute); }
+
 /* Markdown 表格展示 */
 .md-table { border-collapse: collapse; margin: 6px 0; font-size: 13px; }
 .md-table th, .md-table td {

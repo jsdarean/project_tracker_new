@@ -471,15 +471,24 @@ function renderIssues(items) {
     issuesList.innerHTML = '<div class="issues-empty">暂无问题记录</div>';
     return;
   }
-  issuesList.innerHTML = items.map(issue => `
-    <div class="issue-row">
-      <a class="issue-no" href="issue_detail.html?id=${issue.id}">${escapeHtml(issue.issue_no)}</a>
-      <span class="issue-title">${escapeHtml(issue.title)}</span>
+  // 已关闭的问题排到最后面
+  const sortedItems = [...items].sort((a, b) => {
+    if (a.status === '已关闭' && b.status !== '已关闭') return 1;
+    if (a.status !== '已关闭' && b.status === '已关闭') return -1;
+    return 0;
+  });
+  issuesList.innerHTML = sortedItems.map(issue => {
+    const isClosed = issue.status === '已关闭';
+    return `
+    <div class="issue-row${isClosed ? ' issue-closed' : ''}">
+      <a class="issue-no${isClosed ? ' issue-closed-text' : ''}" href="issue_detail.html?id=${issue.id}">${escapeHtml(issue.issue_no)}</a>
+      <span class="issue-title${isClosed ? ' issue-closed-text' : ''}">${escapeHtml(issue.title)}</span>
       <span class="badge badge-severity-${severityClass(issue.severity)}">${escapeHtml(issue.severity)}</span>
       <span class="badge badge-issue-${issueStatusClass(issue.status)}">${escapeHtml(issue.status)}</span>
       <span class="issue-due">${issue.due_date ? '期望 ' + formatDate(issue.due_date) : ''}</span>
       ${issue.is_overdue ? `<span class="overdue-text">逾期 ${issue.overdue_days} 天</span>` : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function statusClass(status) {

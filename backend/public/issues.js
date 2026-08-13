@@ -91,13 +91,21 @@ function renderTable(rows) {
     tableBody.innerHTML = '<tr><td colspan="8" class="empty">暂无数据</td></tr>';
     return;
   }
-  tableBody.innerHTML = rows.map(row => {
+  // 已关闭的问题排到最后面
+  const sortedRows = [...rows].sort((a, b) => {
+    if (a.status === '已关闭' && b.status !== '已关闭') return 1;
+    if (a.status !== '已关闭' && b.status === '已关闭') return -1;
+    return 0;
+  });
+  tableBody.innerHTML = sortedRows.map(row => {
     const overdue = row.is_overdue
       ? `<span class="overdue-text">逾期 ${row.overdue_days} 天</span>`
       : '';
-    return `<tr${row.is_overdue ? ' class="issue-overdue-row"' : ''}>
-      <td><a href="issue_detail.html?id=${row.id}">${escapeHtml(row.issue_no)}</a></td>
-      <td title="${escapeHtml(row.title)}">${escapeHtml(truncate(row.title, 30))}</td>
+    const isClosed = row.status === '已关闭';
+    const trClass = [row.is_overdue ? 'issue-overdue-row' : '', isClosed ? 'issue-closed' : ''].filter(Boolean).join(' ');
+    return `<tr${trClass ? ` class="${trClass}"` : ''}>
+      <td><a class="${isClosed ? 'issue-no issue-closed-text' : 'issue-no'}" href="issue_detail.html?id=${row.id}">${escapeHtml(row.issue_no)}</a></td>
+      <td class="${isClosed ? 'issue-closed-text' : ''}" title="${escapeHtml(row.title)}">${escapeHtml(truncate(row.title, 30))}</td>
       <td>${escapeHtml(row.project_name || '')}</td>
       <td><span class="badge badge-severity-${severityClass(row.severity)}">${escapeHtml(row.severity)}</span></td>
       <td>${escapeHtml(row.assignee || '')}</td>
