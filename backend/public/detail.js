@@ -293,6 +293,10 @@ async function deleteProgress(id) {
   }
 }
 
+// 周报数据缓存：打开弹窗时填充，复制时复用，保证所见即所复制
+let cachedWeeklyProgress = null;
+let cachedWeeklyIssues = null;
+
 async function openWeeklyModal() {
   weeklyModalError.style.display = 'none';
   weeklyModalTitle.textContent = `本周进展及遗留问题 — ${project.project_name || '项目详情'}`;
@@ -319,6 +323,9 @@ async function openWeeklyModal() {
       .filter(p => WeeklyUtils.isInWeek(p.report_date, start, end))
       .sort((a, b) => b.report_date.localeCompare(a.report_date));
     const activeIssues = (issuesResult.data || []).filter(i => i.status !== '已关闭');
+
+    cachedWeeklyProgress = weekProgress;
+    cachedWeeklyIssues = activeIssues;
 
     renderWeeklySection(weeklyProgressSection, '本周进展', weekProgress, 'completed_content');
     renderWeeklySection(weeklyPlanSection, '下阶段计划', weekProgress, 'next_plan');
@@ -374,48 +381,65 @@ function closeWeeklyModal() {
 }
 
 async function copyWeeklyReport() {
-  const { start, end } = WeeklyUtils.getWeekRange();
-  const progressResp = await fetch(`${API_BASE}/api/projects/${projectId}/progress`);
-  const issuesResp = await fetch(`${API_BASE}/api/issues?project_id=${projectId}&pageSize=100`);
-  const progressResult = await progressResp.json();
-  const issuesResult = await issuesResp.json();
-  const weekProgress = (progressResult.data || [])
-    .filter(p => WeeklyUtils.isInWeek(p.report_date, start, end))
-    .sort((a, b) => b.report_date.localeCompare(a.report_date));
-  const activeIssues = (issuesResult.data || []).filter(i => i.status !== '已关闭');
-
-  const text = WeeklyUtils.formatWeeklyReport({
-    projectName: project.project_name,
-    weekStart: start,
-    weekEnd: end,
-    progressItems: weekProgress,
-    issues: activeIssues,
-  });
-
   try {
-    await navigator.clipboard.writeText(text);
-    const originalText = weeklyCopyBtn.textContent;
-    weeklyCopyBtn.textContent = '已复制';
-    setTimeout(() => { weeklyCopyBtn.textContent = originalText; }, 1500);
-  } catch (err) {
-    // 降级：创建临时 textarea 复制
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
+    const { start, end } = WeeklyUtils.getWeekRange();
+    let weekProgress = cachedWeeklyProgress;
+    let activeIssues = cachedWeeklyIssues;
+
+    // 缓存为空（未打开过弹窗）时回退为重新拉取
+    if (!weekProgress || !activeIssues) {
+      const [progressResp, issuesResp] = await Promise.all([
+        fetch(`${API_BASE}/api/projects/${projectId}/progress`),
+        fetch(`${API_BASE}/api/issues?project_id=${projectId}&pageSize=100`),
+      ]);
+      if (!progressResp.ok) throw new Error(`进展 HTTP ${progressResp.status}`);
+      if (!issuesResp.ok) throw new Error(`问题 HTTP ${issuesResp.status}`);
+      const progressResult = await progressResp.json();
+      const issuesResult = await issuesResp.json();
+      if (!progressResult.success) throw new Error(progressResult.error || '加载进展失败');
+      if (!issuesResult.success) throw new Error(issuesResult.error || '加载问题失败');
+      weekProgress = (progressResult.data || [])
+        .filter(p => WeeklyUtils.isInWeek(p.report_date, start, end))
+        .sort((a, b) => b.report_date.localeCompare(a.report_date));
+      activeIssues = (issuesResult.data || []).filter(i => i.status !== '已关闭');
+    }
+
+    const text = WeeklyUtils.formatWeeklyReport({
+      projectName: project.project_name,
+      weekStart: start,
+      weekEnd: end,
+      progressItems: weekProgress,
+      issues: activeIssues,
+    });
+
     try {
-      document.execCommand('copy');
+      await navigator.clipboard.writeText(text);
       const originalText = weeklyCopyBtn.textContent;
       weeklyCopyBtn.textContent = '已复制';
       setTimeout(() => { weeklyCopyBtn.textContent = originalText; }, 1500);
-    } catch (fallbackErr) {
-      weeklyModalError.textContent = '复制失败，请手动选择内容复制';
-      weeklyModalError.style.display = 'block';
-    } finally {
-      document.body.removeChild(textarea);
+    } catch (err) {
+      // 降级：创建临时 textarea 复制
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        const originalText = weeklyCopyBtn.textContent;
+        weeklyCopyBtn.textContent = '已复制';
+        setTimeout(() => { weeklyCopyBtn.textContent = originalText; }, 1500);
+      } catch (fallbackErr) {
+        weeklyModalError.textContent = '复制失败，请手动选择内容复制';
+        weeklyModalError.style.display = 'block';
+      } finally {
+        document.body.removeChild(textarea);
+      }
     }
+  } catch (err) {
+    weeklyModalError.textContent = '生成周报失败：' + err.message;
+    weeklyModalError.style.display = 'block';
   }
 }
 
