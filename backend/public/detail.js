@@ -1,5 +1,8 @@
 const API_BASE = window.location.origin;
 
+// UMD 模块：浏览器环境挂载到 window.WeeklyUtils（detail.html 已在 detail.js 前引入 weekly-utils.js）
+const WeeklyUtils = window.WeeklyUtils;
+
 const urlParams = new URLSearchParams(window.location.search);
 const projectId = urlParams.get('id');
 
@@ -33,6 +36,17 @@ const issuesSection = document.getElementById('issuesSection');
 const issuesError = document.getElementById('issuesError');
 const issuesList = document.getElementById('issuesList');
 const issueAddLink = document.getElementById('issueAddLink');
+const weeklyReportBtn = document.getElementById('weeklyReportBtn');
+const weeklyModal = document.getElementById('weeklyModal');
+const weeklyModalTitle = document.getElementById('weeklyModalTitle');
+const weeklyModalError = document.getElementById('weeklyModalError');
+const weeklyContent = document.getElementById('weeklyContent');
+const weeklyProgressSection = document.getElementById('weeklyProgressSection');
+const weeklyPlanSection = document.getElementById('weeklyPlanSection');
+const weeklyRiskSection = document.getElementById('weeklyRiskSection');
+const weeklyIssuesSection = document.getElementById('weeklyIssuesSection');
+const weeklyCopyBtn = document.getElementById('weeklyCopyBtn');
+const weeklyCloseBtn = document.getElementById('weeklyCloseBtn');
 
 let editingProgressId = null;
 
@@ -99,6 +113,10 @@ async function init() {
     });
     loadProgress();
     issueAddLink.href = `issue_detail.html?new=1&project_id=${projectId}`;
+    weeklyReportBtn.addEventListener('click', openWeeklyModal);
+    weeklyCloseBtn.addEventListener('click', closeWeeklyModal);
+    weeklyModal.addEventListener('click', (e) => { if (e.target === weeklyModal) closeWeeklyModal(); });
+    weeklyCopyBtn.addEventListener('click', copyWeeklyReport);
     loadIssues();
     hideLoading();
     detailCard.style.display = 'block';
@@ -272,6 +290,156 @@ async function deleteProgress(id) {
     await loadProgress();
   } catch (err) {
     alert('删除失败：' + err.message);
+  }
+}
+
+// 周报数据缓存：打开弹窗时填充，复制时复用，保证所见即所复制
+let cachedWeeklyProgress = null;
+let cachedWeeklyIssues = null;
+
+async function openWeeklyModal() {
+  weeklyModalError.style.display = 'none';
+  weeklyModalTitle.textContent = `本周进展及遗留问题 — ${project.project_name || '项目详情'}`;
+  weeklyProgressSection.innerHTML = '<div class="weekly-empty">加载中...</div>';
+  weeklyPlanSection.innerHTML = '';
+  weeklyRiskSection.innerHTML = '';
+  weeklyIssuesSection.innerHTML = '';
+  weeklyModal.style.display = 'flex';
+
+  try {
+    const { start, end } = WeeklyUtils.getWeekRange();
+    const [progressResp, issuesResp] = await Promise.all([
+      fetch(`${API_BASE}/api/projects/${projectId}/progress`),
+      fetch(`${API_BASE}/api/issues?project_id=${projectId}&pageSize=100`),
+    ]);
+    if (!progressResp.ok) throw new Error(`进展 HTTP ${progressResp.status}`);
+    if (!issuesResp.ok) throw new Error(`问题 HTTP ${issuesResp.status}`);
+    const progressResult = await progressResp.json();
+    const issuesResult = await issuesResp.json();
+    if (!progressResult.success) throw new Error(progressResult.error || '加载进展失败');
+    if (!issuesResult.success) throw new Error(issuesResult.error || '加载问题失败');
+
+    const weekProgress = (progressResult.data || [])
+      .filter(p => WeeklyUtils.isInWeek(p.report_date, start, end))
+      .sort((a, b) => b.report_date.localeCompare(a.report_date));
+    const activeIssues = (issuesResult.data || []).filter(i => i.status !== '已关闭');
+
+    cachedWeeklyProgress = weekProgress;
+    cachedWeeklyIssues = activeIssues;
+
+    renderWeeklySection(weeklyProgressSection, '本周进展', weekProgress, 'completed_content');
+    renderWeeklySection(weeklyPlanSection, '下阶段计划', weekProgress, 'next_plan');
+    renderWeeklySection(weeklyRiskSection, '风险说明', weekProgress, 'risk_note');
+    renderWeeklyIssues(weeklyIssuesSection, activeIssues);
+  } catch (err) {
+    weeklyModalError.textContent = '加载失败：' + err.message;
+    weeklyModalError.style.display = 'block';
+  }
+}
+
+function renderWeeklySection(container, title, items, field) {
+  const validItems = items.filter(item => item[field]);
+  let html = `<div class="weekly-section"><h4>${title}</h4>`;
+  if (validItems.length === 0) {
+    html += '<div class="weekly-empty">本周暂无记录</div>';
+  } else {
+    html += validItems.map(item => `
+      <div class="weekly-item">
+        <div class="weekly-item-head">
+          <span class="weekly-item-date">${formatDate(item.report_date)}</span>
+          ${item.reporter ? `<span class="weekly-item-reporter">${escapeHtml(item.reporter)}</span>` : ''}
+        </div>
+        <div class="weekly-item-body">${renderMarkdownTables(item[field] || '')}</div>
+      </div>
+    `).join('');
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderWeeklyIssues(container, issues) {
+  let html = '<div class="weekly-section"><h4>遗留问题</h4>';
+  if (issues.length === 0) {
+    html += '<div class="weekly-empty">暂无未关闭问题</div>';
+  } else {
+    html += issues.map(issue => `
+      <div class="weekly-issue-row">
+        <span class="weekly-issue-no">${escapeHtml(issue.issue_no)}</span>
+        <span class="weekly-issue-title">${escapeHtml(issue.title)}</span>
+        <span class="weekly-issue-meta">负责人：${escapeHtml(issue.assignee || '—')}</span>
+        <span class="badge badge-severity-${severityClass(issue.severity)}">${escapeHtml(issue.severity)}</span>
+        <span class="badge badge-issue-${issueStatusClass(issue.status)}">${escapeHtml(issue.status)}</span>
+      </div>
+    `).join('');
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function closeWeeklyModal() {
+  weeklyModal.style.display = 'none';
+}
+
+async function copyWeeklyReport() {
+  try {
+    const { start, end } = WeeklyUtils.getWeekRange();
+    let weekProgress = cachedWeeklyProgress;
+    let activeIssues = cachedWeeklyIssues;
+
+    // 缓存为空（未打开过弹窗）时回退为重新拉取
+    if (!weekProgress || !activeIssues) {
+      const [progressResp, issuesResp] = await Promise.all([
+        fetch(`${API_BASE}/api/projects/${projectId}/progress`),
+        fetch(`${API_BASE}/api/issues?project_id=${projectId}&pageSize=100`),
+      ]);
+      if (!progressResp.ok) throw new Error(`进展 HTTP ${progressResp.status}`);
+      if (!issuesResp.ok) throw new Error(`问题 HTTP ${issuesResp.status}`);
+      const progressResult = await progressResp.json();
+      const issuesResult = await issuesResp.json();
+      if (!progressResult.success) throw new Error(progressResult.error || '加载进展失败');
+      if (!issuesResult.success) throw new Error(issuesResult.error || '加载问题失败');
+      weekProgress = (progressResult.data || [])
+        .filter(p => WeeklyUtils.isInWeek(p.report_date, start, end))
+        .sort((a, b) => b.report_date.localeCompare(a.report_date));
+      activeIssues = (issuesResult.data || []).filter(i => i.status !== '已关闭');
+    }
+
+    const text = WeeklyUtils.formatWeeklyReport({
+      projectName: project.project_name,
+      weekStart: start,
+      weekEnd: end,
+      progressItems: weekProgress,
+      issues: activeIssues,
+    });
+
+    try {
+      await navigator.clipboard.writeText(text);
+      const originalText = weeklyCopyBtn.textContent;
+      weeklyCopyBtn.textContent = '已复制';
+      setTimeout(() => { weeklyCopyBtn.textContent = originalText; }, 1500);
+    } catch (err) {
+      // 降级：创建临时 textarea 复制
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        const originalText = weeklyCopyBtn.textContent;
+        weeklyCopyBtn.textContent = '已复制';
+        setTimeout(() => { weeklyCopyBtn.textContent = originalText; }, 1500);
+      } catch (fallbackErr) {
+        weeklyModalError.textContent = '复制失败，请手动选择内容复制';
+        weeklyModalError.style.display = 'block';
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+  } catch (err) {
+    weeklyModalError.textContent = '生成周报失败：' + err.message;
+    weeklyModalError.style.display = 'block';
   }
 }
 

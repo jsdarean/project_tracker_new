@@ -135,6 +135,48 @@
     .modal-field textarea { resize: vertical; line-height: 1.6; }
     .modal-tags { display: flex; gap: var(--space-lg); font-size: 14px; color: var(--ink); }
     .modal-actions { display: flex; gap: var(--space-md); justify-content: flex-end; }
+    /* 本周进展弹窗 */
+    .weekly-section { margin-bottom: var(--space-lg); }
+    .weekly-section h4 {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+      margin: 0 0 var(--space-sm);
+      padding-bottom: var(--space-xs);
+      border-bottom: 1px solid var(--hairline);
+    }
+    .weekly-item {
+      font-size: 13px;
+      color: var(--ink);
+      margin-bottom: var(--space-md);
+      padding: var(--space-sm);
+      background: var(--canvas-subtle);
+      border-radius: var(--rounded-sm);
+    }
+    .weekly-item-head {
+      display: flex;
+      gap: var(--space-sm);
+      align-items: center;
+      margin-bottom: var(--space-xs);
+      flex-wrap: wrap;
+    }
+    .weekly-item-date { font-weight: 500; color: var(--ink); }
+    .weekly-item-reporter { font-size: 12px; color: var(--ink-mute); }
+    .weekly-item-body { white-space: pre-wrap; word-break: break-all; line-height: 1.6; }
+    .weekly-empty { font-size: 13px; color: var(--ink-mute); padding: var(--space-sm) 0; }
+    .weekly-issue-row {
+      display: flex;
+      gap: var(--space-sm);
+      align-items: center;
+      padding: var(--space-xs) 0;
+      border-bottom: 1px solid var(--hairline);
+      font-size: 13px;
+      flex-wrap: wrap;
+    }
+    .weekly-issue-row:last-child { border-bottom: none; }
+    .weekly-issue-no { color: var(--primary); }
+    .weekly-issue-title { color: var(--ink); flex: 1; min-width: 200px; }
+    .weekly-issue-meta { color: var(--ink-mute); font-size: 12px; }
     /* 问题列表分区 */
     .detail-issues { padding: 0 var(--space-lg) var(--space-lg); }
     .issue-row {
@@ -162,7 +204,10 @@
           <h1 id="pageTitle">项目详情</h1>
           <p id="pageSubtitle"></p>
         </div>
-        <a href="index.html" class="btn-secondary settings-btn">返回列表</a>
+        <div style="display: flex; gap: var(--space-md); align-items: center;">
+          <button id="weeklyReportBtn" class="btn-secondary">本周进展及遗留问题</button>
+          <a href="index.html" class="btn-secondary settings-btn">返回列表</a>
+        </div>
       </header>
     </div>
   </div>
@@ -248,10 +293,28 @@
         </form>
       </div>
     </div>
+
+    <div id="weeklyModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card" style="width: 720px; max-width: 94vw;">
+        <h3 id="weeklyModalTitle">本周进展及遗留问题</h3>
+        <div id="weeklyModalError" class="error" style="display: none;"></div>
+        <div id="weeklyContent" style="max-height: 60vh; overflow-y: auto; padding-right: var(--space-sm);">
+          <div id="weeklyProgressSection"></div>
+          <div id="weeklyPlanSection"></div>
+          <div id="weeklyRiskSection"></div>
+          <div id="weeklyIssuesSection"></div>
+        </div>
+        <div class="modal-actions" style="margin-top: var(--space-lg); border-top: 1px solid var(--hairline); padding-top: var(--space-md);">
+          <button type="button" id="weeklyCopyBtn" class="btn-primary">复制全部内容</button>
+          <button type="button" id="weeklyCloseBtn" class="btn-secondary">关闭</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script src="markdown-table.js?v=2"></script>
   <script src="table-editor.js?v=1"></script>
+  <script src="weekly-utils.js"></script>
   <script src="detail.js"></script>
 </body>
 </html>
