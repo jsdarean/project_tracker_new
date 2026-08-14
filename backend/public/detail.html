@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>项目详情</title>
   <link rel="stylesheet" href="style.css?v=32">
+  <link rel="stylesheet" href="nav.css?v=1">
   <style>
     .detail-section { margin-bottom: var(--space-lg); }
     .detail-section h2 {
@@ -196,19 +197,14 @@
   </style>
 </head>
 <body>
+  <div id="navContainer"></div>
   <div class="hero">
     <div class="hero-mesh" aria-hidden="true"></div>
     <div class="container hero-content">
-      <header class="page-header">
-        <div class="page-title">
-          <h1 id="pageTitle">项目详情</h1>
-          <p id="pageSubtitle"></p>
-        </div>
-        <div style="display: flex; gap: var(--space-md); align-items: center;">
-          <button id="weeklyReportBtn" class="btn-secondary">本周进展及遗留问题</button>
-          <a href="index.html" class="btn-secondary settings-btn">返回列表</a>
-        </div>
-      </header>
+      <div class="page-title">
+        <h1 id="pageTitle">项目详情</h1>
+        <p id="pageSubtitle"></p>
+      </div>
     </div>
   </div>
 
@@ -315,6 +311,17 @@
   <script src="markdown-table.js?v=2"></script>
   <script src="table-editor.js?v=1"></script>
   <script src="weekly-utils.js"></script>
+  <script src="nav.js"></script>
+  <script>
+    Nav.render(document.getElementById('navContainer'), {
+      current: 'index',
+      breadcrumb: [{ label: '首页', href: 'index.html' }, { label: '项目详情' }],
+      actions: `
+        <button id="weeklyReportBtn" class="btn-secondary">本周进展及遗留问题</button>
+        <a href="index.html" class="btn-secondary">返回列表</a>
+      `,
+    });
+  </script>
   <script src="detail.js"></script>
 </body>
 </html>

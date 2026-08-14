@@ -5,17 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>关注项目 - 项目信息查询</title>
   <link rel="stylesheet" href="style.css?v=28">
+  <link rel="stylesheet" href="nav.css?v=1">
 </head>
 <body>
+  <div id="navContainer"></div>
   <div class="hero">
     <div class="hero-mesh" aria-hidden="true"></div>
     <div class="container hero-content">
-      <header class="page-header">
-        <div class="page-title">
-          <h1>关注项目</h1>
-        </div>
-        <a href="index.html" class="btn-secondary settings-btn">返回查询</a>
-      </header>
+      <div class="page-title">
+        <h1>关注项目</h1>
+      </div>
     </div>
   </div>
 
@@ -114,6 +113,14 @@
     </div>
   </div>
 
+  <script src="nav.js"></script>
+  <script>
+    Nav.render(document.getElementById('navContainer'), {
+      current: 'index',
+      breadcrumb: [{ label: '首页', href: 'index.html' }, { label: '关注项目' }],
+      actions: `<a href="index.html" class="btn-secondary">返回查询</a>`,
+    });
+  </script>
   <script src="watch.js?v=4"></script>
 </body>
 </html>

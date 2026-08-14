@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>问题跟踪</title>
   <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="nav.css?v=1">
   <style>
     .stats-row {
       display: grid;
@@ -26,17 +27,13 @@
   </style>
 </head>
 <body>
+  <div id="navContainer"></div>
   <div class="hero">
     <div class="hero-mesh" aria-hidden="true"></div>
     <div class="container hero-content">
-      <header class="page-header">
-        <div class="page-title">
-          <h1>问题跟踪</h1>
-        </div>
-        <a href="index.html" class="btn-secondary settings-btn">返回首页</a>
-        <a href="escalation.html" class="btn-secondary settings-btn">催办管理</a>
-        <a href="issue_detail.html?new=1" class="btn-primary settings-btn">新建问题</a>
-      </header>
+      <div class="page-title">
+        <h1>问题跟踪</h1>
+      </div>
     </div>
   </div>
 
@@ -99,6 +96,17 @@
     </div>
   </main>
 
+  <script src="nav.js"></script>
+  <script>
+    Nav.render(document.getElementById('navContainer'), {
+      current: 'issues',
+      breadcrumb: [{ label: '首页', href: 'index.html' }, { label: '问题跟踪' }],
+      actions: `
+        <a href="escalation.html" class="btn-secondary">催办管理</a>
+        <a href="issue_detail.html?new=1" class="btn-primary">新建问题</a>
+      `,
+    });
+  </script>
   <script src="issues.js"></script>
 </body>
 </html>

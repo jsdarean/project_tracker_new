@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>问题详情</title>
   <link rel="stylesheet" href="style.css?v=32">
+  <link rel="stylesheet" href="nav.css?v=1">
   <style>
     .issue-form {
       display: grid;
@@ -79,16 +80,14 @@
   </style>
 </head>
 <body>
+  <div id="navContainer"></div>
   <div class="hero">
     <div class="hero-mesh" aria-hidden="true"></div>
     <div class="container hero-content">
-      <header class="page-header">
-        <div class="page-title">
-          <h1 id="pageTitle">问题详情</h1>
-          <p id="pageSubtitle"></p>
-        </div>
-        <a href="issues.html" class="btn-secondary settings-btn">返回列表</a>
-      </header>
+      <div class="page-title">
+        <h1 id="pageTitle">问题详情</h1>
+        <p id="pageSubtitle"></p>
+      </div>
     </div>
   </div>
 
@@ -203,6 +202,14 @@
 
   <script src="markdown-table.js?v=2"></script>
   <script src="table-editor.js?v=1"></script>
+  <script src="nav.js"></script>
+  <script>
+    Nav.render(document.getElementById('navContainer'), {
+      current: 'issues',
+      breadcrumb: [{ label: '首页', href: 'index.html' }, { label: '问题跟踪', href: 'issues.html' }, { label: '问题详情' }],
+      actions: `<a href="issues.html" class="btn-secondary">返回列表</a>`,
+    });
+  </script>
   <script src="issue_detail.js"></script>
 </body>
 </html>
