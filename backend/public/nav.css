@@ -41,7 +41,7 @@
   gap: var(--space-md, 16px);
   flex-shrink: 0;
 }
-.nav-actions a:not(.btn-secondary) {
+.nav-actions a:not([class]) {
   display: inline-flex;
   align-items: center;
   padding: var(--space-sm, 8px) var(--space-md, 16px);
@@ -52,7 +52,7 @@
   border-radius: var(--rounded-sm, 4px);
   background: var(--canvas, #fff);
 }
-.nav-actions a:not(.btn-secondary):hover {
+.nav-actions a:not([class]):hover {
   color: var(--ink, #333);
   border-color: var(--ink-mute, #999);
 }
