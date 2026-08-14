@@ -5,23 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>项目信息查询</title>
   <link rel="stylesheet" href="style.css?v=27">
+  <link rel="stylesheet" href="nav.css?v=1">
 </head>
 <body>
+  <div id="navContainer"></div>
   <div class="hero">
     <div class="hero-mesh" aria-hidden="true"></div>
     <div class="container hero-content">
-      <header class="page-header">
-        <div class="page-title">
-          <h1>项目信息查询</h1>
-        </div>
-        <button id="editBtn" class="btn-secondary settings-btn">变更</button>
-        <a href="watch.html" class="btn-secondary settings-btn">关注项目</a>
-        <a href="issues.html" class="btn-secondary settings-btn">问题跟踪</a>
-        <a href="escalation.html" class="btn-secondary settings-btn">催办管理</a>
-        <a href="contacts.html" class="btn-secondary settings-btn">联系人</a>
-        <a href="company_contacts.html" class="btn-secondary settings-btn">公司通讯录</a>
-        <a href="settings.html" class="btn-secondary settings-btn">设置</a>
-      </header>
+      <div class="page-title">
+        <h1>项目信息查询</h1>
+      </div>
     </div>
   </div>
 
@@ -100,6 +93,22 @@
     </div>
   </main>
 
+  <script src="nav.js"></script>
+  <script>
+    Nav.render(document.getElementById('navContainer'), {
+      current: 'index',
+      breadcrumb: [{ label: '首页' }],
+      actions: `
+        <button id="editBtn" class="btn-secondary">变更</button>
+        <a href="watch.html" class="btn-secondary">关注项目</a>
+        <a href="issues.html" class="btn-secondary">问题跟踪</a>
+        <a href="escalation.html" class="btn-secondary">催办管理</a>
+        <a href="contacts.html" class="btn-secondary">联系人</a>
+        <a href="company_contacts.html" class="btn-secondary">公司通讯录</a>
+        <a href="settings.html" class="btn-secondary">设置</a>
+      `,
+    });
+  </script>
   <script src="app.js?v=31"></script>
 </body>
 </html>
