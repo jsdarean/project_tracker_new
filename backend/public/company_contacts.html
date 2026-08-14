@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>江苏公司 - 部门通讯录</title>
+    <link rel="stylesheet" href="nav.css?v=1">
     <style>
         * {
             margin: 0;
@@ -847,6 +848,7 @@
     </style>
 </head>
 <body>
+    <div id="navContainer"></div>
     <div class="app">
         <!-- Top Header -->
         <header class="top-header">
@@ -953,6 +955,14 @@
 
     <div class="toast" id="toast"></div>
 
+    <script src="nav.js"></script>
+    <script>
+        Nav.render(document.getElementById('navContainer'), {
+            current: 'company_contacts',
+            breadcrumb: [{ label: '首页', href: 'index.html' }, { label: '公司通讯录' }],
+            actions: `<a href="index.html" class="btn-secondary">返回查询</a>`,
+        });
+    </script>
     <script>
         let allData = [];
         let filteredData = [];
