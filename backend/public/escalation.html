@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>催办管理</title>
   <link rel="stylesheet" href="style.css?v=29">
+  <link rel="stylesheet" href="nav.css?v=1">
   <style>
     .esc-section { margin-bottom: var(--space-md); }
     .esc-header {
@@ -54,14 +55,13 @@
   </style>
 </head>
 <body>
+  <div id="navContainer"></div>
   <div class="hero">
     <div class="hero-mesh" aria-hidden="true"></div>
     <div class="container hero-content">
-      <header class="page-header">
-        <div class="page-title"><h1>催办管理</h1></div>
-        <a href="index.html" class="btn-secondary settings-btn">返回首页</a>
-        <a href="issues.html" class="btn-secondary settings-btn">问题跟踪</a>
-      </header>
+      <div class="page-title">
+        <h1>催办管理</h1>
+      </div>
     </div>
   </div>
 
@@ -154,6 +154,14 @@
     </div>
   </main>
 
+  <script src="nav.js"></script>
+  <script>
+    Nav.render(document.getElementById('navContainer'), {
+      current: 'escalation',
+      breadcrumb: [{ label: '首页', href: 'index.html' }, { label: '催办管理' }],
+      actions: `<a href="issues.html" class="btn-secondary">问题跟踪</a>`,
+    });
+  </script>
   <script src="escalation.js"></script>
 </body>
 </html>
