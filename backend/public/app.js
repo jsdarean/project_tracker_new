@@ -12,8 +12,9 @@ let currentSort = '';
 let currentOrder = 'asc';
 const SORTABLE_COLUMNS = new Set(['project_status', 'health_status', 'planned_start_date', 'planned_end_date', 'last_progress_date']);
 
-// 列表默认展示的字段（顺序），_select / _action 为非数据库字段
+// 列表默认展示的字段（顺序），_select / _action / _edit 为非数据库字段
 const displayColumns = [
+  '_edit',
   '_select',
   'doc_number',
   'category',
@@ -60,7 +61,6 @@ const projectStatusFilter = document.getElementById('projectStatusFilter');
 const healthFilter = document.getElementById('healthFilter');
 const refreshBtn = document.getElementById('refreshBtn');
 const exportBtn = document.getElementById('exportBtn');
-const editBtn = document.getElementById('editBtn');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const pageInfo = document.getElementById('pageInfo');
@@ -117,6 +117,7 @@ async function loadColumns() {
 
 function renderHeader() {
   tableHeadRow.innerHTML = displayColumns.map(field => {
+    if (field === '_edit') return '<th>变更</th>';
     if (field === '_select') return '<th><input type="checkbox" id="selectAll" title="全选本页"></th>';
     if (field === '_action') return '<th>操作</th>';
     const label = escapeHtml(columnComments[field] || field);
@@ -240,6 +241,8 @@ function renderTable(rows) {
 
 function renderCell(field, row) {
   switch (field) {
+    case '_edit':
+      return `<td><button class="btn-small row-edit" data-id="${row.id}">变更</button></td>`;
     case '_select':
       return `<td><input type="checkbox" class="row-select" data-id="${row.id}" ${selectedIds.has(String(row.id)) ? 'checked' : ''}></td>`;
     case 'doc_number':
@@ -534,17 +537,12 @@ tableBody.addEventListener('click', async (e) => {
 
 exportBtn.addEventListener('click', exportToExcel);
 
-editBtn.addEventListener('click', () => {
-  const ids = Array.from(selectedIds);
-  if (ids.length === 0) {
-    alert('请先勾选一行记录后再点击“变更”。');
-    return;
+tableBody.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('.row-edit');
+  if (editBtn) {
+    const id = editBtn.getAttribute('data-id');
+    window.location.href = `edit.html?id=${id}`;
   }
-  if (ids.length > 1) {
-    alert('一次只能变更一条记录，请只勾选一行。');
-    return;
-  }
-  window.location.href = `edit.html?id=${ids[0]}`;
 });
 
 tableBody.addEventListener('change', (e) => {

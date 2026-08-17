@@ -19,6 +19,24 @@
   </div>
 
   <main class="container">
+    <div id="overviewCard" class="card overview-card">
+      <div class="overview-header" id="overviewToggle">
+        <span>进展概览</span>
+        <span id="overviewArrow">▼</span>
+      </div>
+      <div id="overviewBody" class="overview-body">
+        <div class="overview-col">
+          <h3>最近更新</h3>
+          <div id="overviewRecent" class="overview-list">加载中...</div>
+        </div>
+        <div class="overview-col">
+          <h3>进展滞后 / 未填报 <button type="button" id="staleToggle" class="btn-small btn-secondary">展开</button></h3>
+          <div id="staleSummary" class="overview-empty"></div>
+          <div id="overviewStale" class="overview-list" style="display: none;">加载中...</div>
+        </div>
+      </div>
+    </div>
+
     <div class="toolbar card">
       <input type="text" id="searchInput" placeholder="搜索项目编码、项目名称、发文文号…">
       <select id="statusFilter">
@@ -54,24 +72,6 @@
       <button id="exportBtn" class="btn-secondary">导出 Excel</button>
     </div>
 
-    <div id="overviewCard" class="card overview-card">
-      <div class="overview-header" id="overviewToggle">
-        <span>进展概览</span>
-        <span id="overviewArrow">▼</span>
-      </div>
-      <div id="overviewBody" class="overview-body">
-        <div class="overview-col">
-          <h3>最近更新</h3>
-          <div id="overviewRecent" class="overview-list">加载中...</div>
-        </div>
-        <div class="overview-col">
-          <h3>进展滞后 / 未填报 <button type="button" id="staleToggle" class="btn-small btn-secondary">展开</button></h3>
-          <div id="staleSummary" class="overview-empty"></div>
-          <div id="overviewStale" class="overview-list" style="display: none;">加载中...</div>
-        </div>
-      </div>
-    </div>
-
     <div id="loading" class="loading card">加载中...</div>
     <div id="error" class="error card" style="display: none;"></div>
 
@@ -99,7 +99,6 @@
       current: 'index',
       breadcrumb: [{ label: '首页' }],
       actions: `
-        <button id="editBtn" class="btn-secondary">变更</button>
         <a href="watch.html" class="btn-secondary">关注项目</a>
         <a href="issues.html" class="btn-secondary">问题跟踪</a>
         <a href="escalation.html" class="btn-secondary">催办管理</a>
