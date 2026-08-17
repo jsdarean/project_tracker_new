@@ -223,8 +223,8 @@ function renderTable(rows) {
 
   updateSelectAllState();
 
-  // 绑定删除事件
-  tableBody.querySelectorAll('.btn-small').forEach(btn => {
+  // 绑定删除事件（排除行首变更按钮）
+  tableBody.querySelectorAll('.btn-small:not(.row-edit)').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.getAttribute('data-id');
       if (!confirm(`确定删除记录 ${id} 吗？`)) return;
