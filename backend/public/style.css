@@ -1190,6 +1190,16 @@ th.sortable:hover {
 .overview-meta { float: right; color: var(--ink-mute); font-size: 12px; }
 .overview-summary { color: var(--ink-secondary); margin-top: 2px; }
 .overview-empty { color: var(--ink-mute); font-size: 13px; }
+.overview-expand-toggle {
+  text-align: center;
+  color: var(--ink-mute);
+  font-size: 12px;
+  cursor: pointer;
+  padding: var(--space-xs) 0;
+  margin-top: var(--space-xs);
+  user-select: none;
+}
+.overview-expand-toggle:hover { color: var(--primary); }
 
 /* 进展滞后标识 */
 .stale-text { color: var(--ruby); font-size: 12px; }

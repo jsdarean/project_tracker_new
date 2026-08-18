@@ -84,6 +84,17 @@ async function init() {
   await loadData();
   applyStaleVisibility();
   loadOverview();
+
+  overviewRecent.addEventListener('click', (e) => {
+    const toggle = e.target.closest('.overview-expand-toggle');
+    if (!toggle) return;
+    const action = toggle.dataset.action;
+    if (action === 'expand' || action === 'retry') {
+      expandRecent();
+    } else if (action === 'collapse') {
+      collapseRecent();
+    }
+  });
 }
 
 async function loadExportSettings() {
@@ -478,6 +489,19 @@ function renderOverviewRecent(items, total) {
     overviewRecent.innerHTML = '<div class="overview-empty">暂无进展记录</div>';
     return;
   }
+  const toggleHtml = (() => {
+    if (recentExpandError && !recentExpanded) {
+      return '<div class="overview-expand-toggle" data-action="retry">加载失败，点击重试</div>';
+    }
+    if (recentExpanded) {
+      return '<div class="overview-expand-toggle" data-action="collapse">收起</div>';
+    }
+    if (total > items.length) {
+      return `<div class="overview-expand-toggle" data-action="expand">展开剩余 ${total - items.length} 个</div>`;
+    }
+    return '';
+  })();
+
   overviewRecent.innerHTML = items.map(item => {
     const tags = (item.tags || '').split(',').map(s => s.trim()).filter(Boolean);
     const tagsHtml = tags.map(t => `<span class="badge badge-tag-${progressTagClass(t)}">${escapeHtml(t)}</span>`).join(' ');
@@ -487,7 +511,7 @@ function renderOverviewRecent(items, total) {
       <span class="overview-meta">${formatDate(item.report_date)}</span>
       <div class="overview-summary">${escapeHtml(truncate(item.completed_content, 40))} ${tagsHtml}</div>
     </div>`;
-  }).join('');
+  }).join('') + toggleHtml;
 }
 
 function renderOverviewStale(items) {
