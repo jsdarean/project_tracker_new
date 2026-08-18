@@ -730,7 +730,7 @@ app.delete('/api/progress/:id', async (req, res) => {
 app.get('/api/progress/overview', async (req, res) => {
   try {
     const requestedLimit = parseInt(req.query.limit, 10);
-    const limit = Number.isNaN(requestedLimit) ? 10 : Math.min(requestedLimit, 200);
+    const limit = Number.isNaN(requestedLimit) ? 10 : Math.max(1, Math.min(requestedLimit, 200));
 
     const recentTotalRow = await query(
       `SELECT COUNT(DISTINCT pp.project_id) AS total

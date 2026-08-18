@@ -46,7 +46,7 @@ test('GET /api/progress/overview 返回 recent_total 且 limit 参数生效', as
   assert.strictEqual(resp.status, 200);
   assert.strictEqual(body.success, true);
   assert.ok(Number.isInteger(body.data.recent_total));
-  assert.ok(body.data.recent_total >= 3, 'recent_total 应包含所有有进展的项目');
+  assert.strictEqual(body.data.recent_total, 3, 'recent_total 应包含所有有进展的项目');
   assert.ok(body.data.recent.length <= 10, '默认 limit 最多 10 条');
 
   const limited = await fetch(`${baseUrl}/api/progress/overview?limit=1`);
@@ -55,6 +55,30 @@ test('GET /api/progress/overview 返回 recent_total 且 limit 参数生效', as
   assert.strictEqual(limitedBody.success, true);
   assert.strictEqual(limitedBody.data.recent.length, 1, 'limit=1 应只返回 1 条');
   assert.strictEqual(limitedBody.data.recent_total, body.data.recent_total, 'recent_total 不受 limit 影响');
+});
+
+test('GET /api/progress/overview limit 边界值处理', async () => {
+  // limit=0 被规范为 1，不返回空列表
+  const zero = await fetch(`${baseUrl}/api/progress/overview?limit=0`);
+  const zeroBody = await zero.json();
+  assert.strictEqual(zero.status, 200);
+  assert.strictEqual(zeroBody.success, true);
+  assert.ok(zeroBody.data.recent.length >= 1, 'limit=0 应被规范为至少 1 条');
+
+  // 负数 limit 被规范为 1，不触发 MySQL 语法错误
+  const neg = await fetch(`${baseUrl}/api/progress/overview?limit=-1`);
+  const negBody = await neg.json();
+  assert.strictEqual(neg.status, 200);
+  assert.strictEqual(negBody.success, true);
+  assert.ok(negBody.data.recent.length >= 1, '负数 limit 应被规范为至少 1 条');
+
+  // 超过上限的 limit 被截断为 200
+  const huge = await fetch(`${baseUrl}/api/progress/overview?limit=999`);
+  const hugeBody = await huge.json();
+  assert.strictEqual(huge.status, 200);
+  assert.strictEqual(hugeBody.success, true);
+  assert.ok(hugeBody.data.recent.length <= 200, 'limit=999 应被截断为最多 200 条');
+  assert.strictEqual(hugeBody.data.recent_total, 3, '种子数据下 recent_total 为 3');
 });
 
 test.after(() => teardown());
