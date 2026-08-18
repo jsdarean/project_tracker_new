@@ -72,6 +72,10 @@ const staleToggle = document.getElementById('staleToggle');
 const staleSummary = document.getElementById('staleSummary');
 let staleExpanded = false;
 let selectAllCheckbox = null;
+let recentTotal = 0;
+let recentExpanded = false;
+let recentAllItems = null;
+let recentExpandError = false;
 
 async function init() {
   await loadColumns();
@@ -406,11 +410,49 @@ async function loadOverview() {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const result = await resp.json();
     if (!result.success) throw new Error(result.error || '加载失败');
-    renderOverviewRecent(result.data.recent || []);
+    recentTotal = result.data.recent_total || 0;
+    recentExpanded = false;
+    recentAllItems = null;
+    recentExpandError = false;
+    renderOverviewRecent(result.data.recent || [], recentTotal);
     renderOverviewStale(result.data.stale || []);
   } catch (err) {
     overviewRecent.innerHTML = '<div class="overview-empty">进展概览加载失败</div>';
     overviewStale.innerHTML = '';
+  }
+}
+
+async function expandRecent() {
+  if (recentAllItems) {
+    recentExpanded = true;
+    recentExpandError = false;
+    renderOverviewRecent(recentAllItems, recentTotal);
+    return;
+  }
+  const toggle = overviewRecent.querySelector('.overview-expand-toggle');
+  if (toggle) toggle.textContent = '加载中…';
+  try {
+    const resp = await fetch(`${API_BASE}/api/progress/overview?limit=100`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.error || '加载失败');
+    recentAllItems = result.data.recent || [];
+    recentExpanded = true;
+    recentExpandError = false;
+    renderOverviewRecent(recentAllItems, recentTotal);
+  } catch (err) {
+    console.error('展开最近更新失败:', err);
+    recentExpandError = true;
+    const toggle = overviewRecent.querySelector('.overview-expand-toggle');
+    if (toggle) toggle.textContent = '加载失败，点击重试';
+  }
+}
+
+function collapseRecent() {
+  recentExpanded = false;
+  recentExpandError = false;
+  if (recentAllItems) {
+    renderOverviewRecent(recentAllItems.slice(0, 10), recentTotal);
   }
 }
 
@@ -431,7 +473,7 @@ function renderWatchTypeBadges(watchType) {
   ).join('');
 }
 
-function renderOverviewRecent(items) {
+function renderOverviewRecent(items, total) {
   if (items.length === 0) {
     overviewRecent.innerHTML = '<div class="overview-empty">暂无进展记录</div>';
     return;
