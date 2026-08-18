@@ -1184,9 +1184,10 @@ th.sortable:hover {
   padding: var(--space-xs) 0;
   border-bottom: 1px solid var(--hairline);
   font-size: 13px;
+  overflow: hidden;
 }
 .overview-item:last-child { border-bottom: none; }
-.overview-meta { color: var(--ink-mute); font-size: 12px; margin-left: var(--space-sm); }
+.overview-meta { float: right; color: var(--ink-mute); font-size: 12px; }
 .overview-summary { color: var(--ink-secondary); margin-top: 2px; }
 .overview-empty { color: var(--ink-mute); font-size: 13px; }
 
