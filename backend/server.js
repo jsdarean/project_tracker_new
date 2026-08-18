@@ -729,7 +729,16 @@ app.delete('/api/progress/:id', async (req, res) => {
 // 首页进展概览：最近更新 + 进展滞后/未填报（stale 排除已结项项目）
 app.get('/api/progress/overview', async (req, res) => {
   try {
-    // 每个项目只取最新一条进展（按 report_date，同日取 id 最大者），最多 10 条
+    const requestedLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isNaN(requestedLimit) ? 10 : Math.min(requestedLimit, 200);
+
+    const recentTotalRow = await query(
+      `SELECT COUNT(DISTINCT pp.project_id) AS total
+       FROM project_progress pp
+       JOIN projects p ON p.id = pp.project_id`
+    );
+    const recentTotal = recentTotalRow[0].total;
+
     const recent = await query(
       `SELECT pp.id, pp.project_id, p.project_name, pp.report_date, pp.completed_content, pp.tags, pp.reporter,
               w.watch_type
@@ -743,7 +752,7 @@ app.get('/api/progress/overview', async (req, res) => {
          LIMIT 1
        )
        ORDER BY pp.report_date DESC, pp.id DESC
-       LIMIT 10`
+       LIMIT ${limit}`
     );
 
     const stale = await query(
@@ -760,7 +769,7 @@ app.get('/api/progress/overview', async (req, res) => {
       [STALE_DAYS]
     );
 
-    res.json({ success: true, data: { recent, stale } });
+    res.json({ success: true, data: { recent, recent_total: recentTotal, stale } });
   } catch (err) {
     console.error('查询进展概览失败:', err);
     res.status(500).json({ error: '查询进展概览失败', message: err.message });

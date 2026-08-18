@@ -39,6 +39,24 @@ test.before(async () => {
     [ids['概览项目D'], daysAgo(60)]
   );
 });
+
+test('GET /api/progress/overview 返回 recent_total 且 limit 参数生效', async () => {
+  const resp = await fetch(`${baseUrl}/api/progress/overview`);
+  const body = await resp.json();
+  assert.strictEqual(resp.status, 200);
+  assert.strictEqual(body.success, true);
+  assert.ok(Number.isInteger(body.data.recent_total));
+  assert.ok(body.data.recent_total >= 3, 'recent_total 应包含所有有进展的项目');
+  assert.ok(body.data.recent.length <= 10, '默认 limit 最多 10 条');
+
+  const limited = await fetch(`${baseUrl}/api/progress/overview?limit=1`);
+  const limitedBody = await limited.json();
+  assert.strictEqual(limited.status, 200);
+  assert.strictEqual(limitedBody.success, true);
+  assert.strictEqual(limitedBody.data.recent.length, 1, 'limit=1 应只返回 1 条');
+  assert.strictEqual(limitedBody.data.recent_total, body.data.recent_total, 'recent_total 不受 limit 影响');
+});
+
 test.after(() => teardown());
 
 test('GET /api/projects 返回 last_progress_date 且可排序', async () => {
