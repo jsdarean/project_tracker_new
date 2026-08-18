@@ -420,7 +420,7 @@ function renderOverviewRecent(items) {
     const tags = (item.tags || '').split(',').map(s => s.trim()).filter(Boolean);
     const tagsHtml = tags.map(t => `<span class="badge badge-tag-${progressTagClass(t)}">${escapeHtml(t)}</span>`).join(' ');
     return `<div class="overview-item">
-      <a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 20))}</a>
+      <a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 40))}</a>
       <span class="overview-meta">${formatDate(item.report_date)}</span>
       <div class="overview-summary">${escapeHtml(truncate(item.completed_content, 40))} ${tagsHtml}</div>
     </div>`;
