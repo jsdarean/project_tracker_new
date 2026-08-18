@@ -6,6 +6,7 @@ let total = 0;
 let currentRows = [];
 const selectedIds = new Set();
 let exportFields = [];
+let watchTags = [];
 
 // 当前排序（字段白名单与后端一致）
 let currentSort = '';
@@ -86,12 +87,18 @@ async function loadExportSettings() {
     const resp = await fetch(`${API_BASE}/api/settings`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const result = await resp.json();
-    if (result.success && Array.isArray(result.data.export_fields)) {
-      exportFields = result.data.export_fields;
+    if (result.success) {
+      if (Array.isArray(result.data.export_fields)) {
+        exportFields = result.data.export_fields;
+      }
+      if (Array.isArray(result.data.watch_tags)) {
+        watchTags = result.data.watch_tags;
+      }
     }
   } catch (err) {
     console.error('加载导出字段设置失败:', err);
     exportFields = [];
+    watchTags = [];
   }
 }
 
@@ -411,6 +418,19 @@ function progressTagClass(tag) {
   return { '里程碑达成': 'milestone', '风险上升': 'risk', '需领导决策': 'decision' }[tag] || 'milestone';
 }
 
+function getWatchTagColor(name) {
+  const tag = watchTags.find(t => t.name === name);
+  return tag ? tag.color : '#533afd';
+}
+
+function renderWatchTypeBadges(watchType) {
+  const names = String(watchType || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (names.length === 0) return '';
+  return names.map(n =>
+    `<span class="watch-tag-badge" style="background:${escapeHtml(getWatchTagColor(n))}">${escapeHtml(n)}</span>`
+  ).join('');
+}
+
 function renderOverviewRecent(items) {
   if (items.length === 0) {
     overviewRecent.innerHTML = '<div class="overview-empty">暂无进展记录</div>';
@@ -419,8 +439,9 @@ function renderOverviewRecent(items) {
   overviewRecent.innerHTML = items.map(item => {
     const tags = (item.tags || '').split(',').map(s => s.trim()).filter(Boolean);
     const tagsHtml = tags.map(t => `<span class="badge badge-tag-${progressTagClass(t)}">${escapeHtml(t)}</span>`).join(' ');
+    const watchBadgesHtml = renderWatchTypeBadges(item.watch_type);
     return `<div class="overview-item">
-      <a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 40))}</a>
+      <a href="detail.html?id=${item.project_id}">${escapeHtml(truncate(item.project_name, 40))}</a> ${watchBadgesHtml}
       <span class="overview-meta">${formatDate(item.report_date)}</span>
       <div class="overview-summary">${escapeHtml(truncate(item.completed_content, 40))} ${tagsHtml}</div>
     </div>`;

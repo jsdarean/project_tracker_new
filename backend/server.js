@@ -731,9 +731,11 @@ app.get('/api/progress/overview', async (req, res) => {
   try {
     // 每个项目只取最新一条进展（按 report_date，同日取 id 最大者），最多 10 条
     const recent = await query(
-      `SELECT pp.id, pp.project_id, p.project_name, pp.report_date, pp.completed_content, pp.tags, pp.reporter
+      `SELECT pp.id, pp.project_id, p.project_name, pp.report_date, pp.completed_content, pp.tags, pp.reporter,
+              w.watch_type
        FROM project_progress pp
        JOIN projects p ON p.id = pp.project_id
+       LEFT JOIN watch_projects w ON w.project_id = pp.project_id
        WHERE pp.id = (
          SELECT p2.id FROM project_progress p2
          WHERE p2.project_id = pp.project_id
